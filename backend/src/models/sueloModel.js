@@ -6,22 +6,22 @@ const getAllSuelos = async () => {
 };
 
 const getSueloById = async (id) => {
-    const result = await db.query('SELECT * FROM suelo WHERE id = $1', [id]);
+    const result = await db.query('SELECT * FROM suelo WHERE id_suelo = $1', [id]);
     return result.rows[0];
 };
 
-const createSuelo = async (data) => {
-    const { tipo_suelo, caracteristicas } = data;
+const createSuelo = async (suelo) => {
+    const { tipo_suelo, caracteristicas } = suelo;
     const result = await db.query(
         'INSERT INTO suelo (tipo_suelo, caracteristicas) VALUES ($1, $2) RETURNING *',
         [tipo_suelo, caracteristicas]
     );
     return result.rows[0];
 };
-const updateSuelo = async (id, data) => {
-    const { tipo_suelo, caracteristicas } = data;
+const updateSuelo = async (id, suelo) => {
+    const { tipo_suelo, caracteristicas } = suelo;
     const result = await db.query(
-        'UPDATE suelo SET tipo_suelo = $1, caracteristicas = $2 WHERE id = $3 RETURNING *',
+        'UPDATE suelo SET tipo_suelo = $1, caracteristicas = $2 WHERE id_suelo = $3 RETURNING *',
         [tipo_suelo, caracteristicas, id]
     );
     return result.rows[0];

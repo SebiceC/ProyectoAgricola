@@ -45,4 +45,4 @@ module.exports = {
   createCultivo,
   updateCultivo,
   deleteCultivo,
-};
+};dasads
