@@ -1,27 +1,27 @@
-const pool = require('../config/db');
+const db = require('../config/db');
 
 const getAllRoles = async () => {
-  const result = await pool.query('SELECT * FROM rol');
+  const result = await db.query('SELECT * FROM roles');
   return result.rows;
 };
 
 const getRolById = async (id) => {
-  const result = await pool.query('SELECT * FROM rol WHERE nombre_rol = $1', [id]);
+  const result = await db.query('SELECT * FROM roles WHERE nombre_rol = $1', [id]);
   return result.rows[0];
 };
 
 const createRol = async (rol) => {
-  const { nombre_rol, descripcion_rol, permisos_rol } = rol;
-  const result = await pool.query(
+  const { nombre, descripcion, permisos } = rol;
+  const result = await db.query(
     'INSERT INTO rol (nombre_rol, descripcion_rol, permisos_rol) VALUES ($1, $2, $3) RETURNING *',
-    [nombre_rol, descripcion_rol, permisos_rol]
+    [nombre, descripcion, permisos]
   );
   return result.rows[0];
 };
 
 const updateRol = async (id, rol) => {
-  const { descripcion_rol, permisos_rol } = rol;
-  const result = await pool.query(
+  const { descripcion, permisos } = rol;
+  const result = await db.query(
     'UPDATE rol SET descripcion_rol = $1, permisos_rol = $2 WHERE nombre_rol = $3 RETURNING *',
     [descripcion_rol, permisos_rol, id]
   );
@@ -29,7 +29,7 @@ const updateRol = async (id, rol) => {
 };
 
 const deleteRol = async (id) => {
-  const result = await pool.query('DELETE FROM rol WHERE nombre_rol = $1 RETURNING *', [id]);
+  const result = await db.query('DELETE FROM rol WHERE nombre_rol = $1 RETURNING *', [id]);
   return result.rows[0];
 };
 

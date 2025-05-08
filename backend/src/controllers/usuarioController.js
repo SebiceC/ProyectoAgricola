@@ -13,45 +13,59 @@ const obtenerUsuarios = async (req, res) => {
 
 const obtenerUsuarioPorId = async (req, res) => {
   try {
-    const usuario = await usuarioModel.getUsuarioById();
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ error: 'ID de usuario no proporcionado' });
+    }
+    const usuario = await usuarioModel.getUsuarioById(id);
     res.json(usuario);
-  }
-  catch (error) {
+  } catch (error) {
     console.error('Error al obtener el usuario:', error);
     res.status(500).json({ error: 'Error al obtener el usuario' });
   }
-}
+};
 
 const crearUsuario = async (req, res) => {
   try {
-    const nuevoUsuario = await usuarioModel.createUsuario();
-    res.json(nuevoUsuario);
+    const datosUsuario = req.body;
+    const nuevoUsuario = await usuarioModel.createUsuario(datosUsuario);
+    res.status(201).json(nuevoUsuario);
   }
   catch (error) {
     console.error('Error al crear el usuario:', error);
     res.status(500).json({ error: 'Error al crear el usuario' });
   }
-}
+};
 
 const actualizarUsuario = async (req, res) => {
   try {
-    const usuarioActualizado = await usuarioModel.updateUsuario();
+    const { id } = req.params;
+    const datosActualizados = req.body;
+    const usuarioActualizado = await usuarioModel.updateUsuario(id, datosActualizados);
     res.json(usuarioActualizado);
   }
   catch (error) {
     console.error('Error al actualizar el usuario:', error);
     res.status(500).json({ error: 'Error al actualizar el usuario' });
   }
-}
+};
 
 const eliminarUsuario = async (req, res) => {
   try {
-    const usuarioEliminado = await usuarioModel.deleteUsuario();
+    const { id } = req.params;
+    const usuarioEliminado = await usuarioModel.deleteUsuario(id);
     res.json(usuarioEliminado);
   }
   catch (error) {
     console.error('Error al eliminar el usuario:', error);
     res.status(500).json({ error: 'Error al eliminar el usuario' });
   }
-}
-module.exports = { UsuarioController };
+};
+
+module.exports = { 
+  obtenerUsuarioPorId,
+  obtenerUsuarios,
+  crearUsuario,
+  actualizarUsuario,
+  eliminarUsuario
+};
