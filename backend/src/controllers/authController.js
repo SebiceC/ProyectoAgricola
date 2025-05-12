@@ -1,9 +1,9 @@
-const User = require('../models/user.model');
+const User = require('../models/usuarioModel');
 
 const authController = {
   async register(req, res) {
     try {
-      const user = await User.create(req.body);
+      const user = await User.createUsuario(req.body);
       res.status(201).json({
         message: 'Usuario registrado exitosamente',
         user

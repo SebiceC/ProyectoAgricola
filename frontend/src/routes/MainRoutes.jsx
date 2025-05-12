@@ -1,25 +1,20 @@
 import { lazy } from 'react';
-
-// project imports
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
+import ProtectedRoute from 'routes/ProtectedRoute';
+import UsersManagement from 'pages/admin/UsersManagement';
+import RolesManagement from 'pages/admin/RolesManagement';
 
-// render- Dashboard
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
 
-// render - color
-const Color = Loadable(lazy(() => import('pages/component-overview/color')));
-const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
-const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
-
-// render - sample page
-const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')));
-
-// ==============================|| MAIN ROUTING ||============================== //
 
 const MainRoutes = {
   path: '/',
-  element: <DashboardLayout />,
+  element: (
+    <ProtectedRoute>
+      <DashboardLayout />
+    </ProtectedRoute>
+  ),
   children: [
     {
       path: '/',
@@ -35,20 +30,27 @@ const MainRoutes = {
       ]
     },
     {
-      path: 'typography',
-      element: <Typography />
-    },
-    {
-      path: 'color',
-      element: <Color />
-    },
-    {
-      path: 'shadow',
-      element: <Shadow />
-    },
-    {
-      path: 'sample-page',
-      element: <SamplePage />
+      path: 'admin',
+      children: [
+        {
+          path: 'users',
+          element: localStorage.getItem('role') === 'admin' ? (
+            <UsersManagement />
+          ) : (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <h2>No tienes permisos para acceder a esta página.</h2>
+            </div>
+          )
+        },
+        {
+          path: 'roles',
+          element: localStorage.getItem('role') === 'admin' ? (
+            <RolesManagement />
+          ) : (
+            <div>No tienes permisos para acceder a esta página.</div>
+          )
+        }
+      ]
     }
   ]
 };

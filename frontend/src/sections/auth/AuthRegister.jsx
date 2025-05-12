@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link as RouterLink, useSearchParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 
 // material-ui
 import Button from '@mui/material/Button';
@@ -33,6 +33,8 @@ import EyeInvisibleOutlined from '@ant-design/icons/EyeInvisibleOutlined';
 export default function AuthRegister() {
   const [level, setLevel] = useState();
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+
   const handleClickShowPassword = () => {
     setShowPassword(!showPassword);
   };
@@ -75,7 +77,7 @@ export default function AuthRegister() {
         })}
         onSubmit={async (values, { setErrors, setSubmitting }) => {
           try {
-            const response = await fetch('/api/register', {
+            const response = await fetch(import.meta.env.VITE_URL_BACKEND_API + 'auth/register', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
@@ -83,12 +85,18 @@ export default function AuthRegister() {
               body: JSON.stringify(values)
             });
             const data = await response.json();
+
             if (!response.ok) {
               setErrors({ submit: data.message || 'Something went wrong!' });
               setSubmitting(false);
               return;
             }
-            window.location.href = '/login';
+
+            // Guardar autenticación y redirigir al Dashboard
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('role', data.rol_id); // Guardar el rol en el localStorage
+            
+            navigate('/');
           } catch (error) {
             setErrors({ submit: error.message || 'Something went wrong!' });
             setSubmitting(false);
@@ -104,8 +112,8 @@ export default function AuthRegister() {
                   <OutlinedInput
                     id="firstname-login"
                     type="firstname"
-                    value={values.firstname}
-                    name="firstname"
+                    value={values.nombre}
+                    name="nombre"
                     onBlur={handleBlur}
                     onChange={handleChange}
                     placeholder="John"
@@ -126,8 +134,8 @@ export default function AuthRegister() {
                     fullWidth
                     error={Boolean(touched.lastname && errors.lastname)}
                     id="lastname-signup"
-                    type="lastname"
-                    value={values.lastname}
+                    type="apellido"
+                    value={values.apellido}
                     name="lastname"
                     onBlur={handleBlur}
                     onChange={handleChange}
@@ -138,27 +146,6 @@ export default function AuthRegister() {
                 {touched.lastname && errors.lastname && (
                   <FormHelperText error id="helper-text-lastname-signup">
                     {errors.lastname}
-                  </FormHelperText>
-                )}
-              </Grid>
-              <Grid size={12}>
-                <Stack sx={{ gap: 1 }}>
-                  <InputLabel htmlFor="company-signup">Company</InputLabel>
-                  <OutlinedInput
-                    fullWidth
-                    error={Boolean(touched.company && errors.company)}
-                    id="company-signup"
-                    value={values.company}
-                    name="company"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    placeholder="Demo Inc."
-                    inputProps={{}}
-                  />
-                </Stack>
-                {touched.company && errors.company && (
-                  <FormHelperText error id="helper-text-company-signup">
-                    {errors.company}
                   </FormHelperText>
                 )}
               </Grid>

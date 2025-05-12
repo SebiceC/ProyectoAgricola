@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import React from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
 // material-ui
 import Button from '@mui/material/Button';
@@ -31,6 +31,7 @@ import EyeInvisibleOutlined from '@ant-design/icons/EyeInvisibleOutlined';
 
 export default function AuthLogin({ isDemo = false }) {
   const [checked, setChecked] = React.useState(false);
+  const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = React.useState(false);
   const handleClickShowPassword = () => {
@@ -58,21 +59,24 @@ export default function AuthLogin({ isDemo = false }) {
         })}
         onSubmit={async (values, { setErrors, setSubmitting }) => {
           try {
-            const response = await fetch('/api/login', {
+            const response = await fetch(import.meta.env.VITE_URL_BACKEND_API + "auth/login", {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(values)
             });
+
             const data = await response.json();
+            
             if (!response.ok) {
               setErrors({ submit: data.message || 'Incorrect email or password!' });
               setSubmitting(false);
               return;
             }
-            // Guarda token en localStorage (opcional, según backend):
-            localStorage.setItem('token', data.token);
-            // Redirigir al usuario después del login exitoso:
-            window.location.href = '/dashboard';
+
+            // Guardar autenticación local
+            localStorage.setItem('role', data.user.rol_id); // Guardar el rol en el localStorage
+            localStorage.setItem('isAuthenticated', 'true');
+            navigate('/');
           } catch (error) {
             setErrors({ submit: error.message || 'Something went wrong!' });
             setSubmitting(false);

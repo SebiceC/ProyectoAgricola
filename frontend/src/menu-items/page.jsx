@@ -1,13 +1,38 @@
 // assets
-import { LoginOutlined, ProfileOutlined } from '@ant-design/icons';
+import { LoginOutlined, ProfileOutlined, UserOutlined, KeyOutlined  } from '@ant-design/icons';
 
 // icons
 const icons = {
   LoginOutlined,
-  ProfileOutlined
+  ProfileOutlined,
+  UserOutlined,
+  KeyOutlined 
 };
 
+const role = localStorage.getItem('role'); // Traemos el rol del localStorage
+
 // ==============================|| MENU ITEMS - EXTRA PAGES ||============================== //
+const adminPages = role === 'admin' ? {
+  id: 'admin',
+  title: 'Admin',
+  type: 'group',
+  children: [
+    {
+      id: 'users-management',
+      title: 'User Management',
+      type: 'item',
+      url: '/admin/users',
+      icon: icons.UserOutlined
+    },
+    {
+      id: 'roles-management',
+      title: 'Role Management',
+      type: 'item',
+      url: '/admin/roles',
+      icon: icons.KeyOutlined
+    }
+  ]
+}: null;
 
 const pages = {
   id: 'authentication',
@@ -33,4 +58,4 @@ const pages = {
   ]
 };
 
-export default pages;
+export  { pages, adminPages } ;

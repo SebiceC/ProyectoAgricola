@@ -33,6 +33,15 @@ const UsuarioModel = {
   deleteUsuario: async (id) => {
     const result = await db.query('DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *', [id]);
     return result.rows[0];
+  },
+
+  verifyCredentials: async (email, password) => {
+    const result = await db.query('SELECT * FROM usuarios WHERE email_usuario = $1 AND contraseña_hash_usuario = $2', [email, password]); 
+    if (result.rows.length > 0) {
+      return result.rows[0];
+    } else {
+      throw new Error('Invalid email or password');
+    }
   }
 };
 

@@ -13,7 +13,7 @@ const getRolById = async (id) => {
 const createRol = async (rol) => {
   const { nombre, descripcion, permisos } = rol;
   const result = await db.query(
-    'INSERT INTO rol (nombre_rol, descripcion_rol, permisos_rol) VALUES ($1, $2, $3) RETURNING *',
+    'INSERT INTO roles (nombre_rol, descripcion_rol, permisos_rol) VALUES ($1, $2, $3) RETURNING *',
     [nombre, descripcion, permisos]
   );
   return result.rows[0];
@@ -22,14 +22,14 @@ const createRol = async (rol) => {
 const updateRol = async (id, rol) => {
   const { descripcion, permisos } = rol;
   const result = await db.query(
-    'UPDATE rol SET descripcion_rol = $1, permisos_rol = $2 WHERE nombre_rol = $3 RETURNING *',
+    'UPDATE roles SET descripcion_rol = $1, permisos_rol = $2 WHERE nombre_rol = $3 RETURNING *',
     [descripcion_rol, permisos_rol, id]
   );
   return result.rows[0];
 };
 
 const deleteRol = async (id) => {
-  const result = await db.query('DELETE FROM rol WHERE nombre_rol = $1 RETURNING *', [id]);
+  const result = await db.query('DELETE FROM roles WHERE nombre_rol = $1 RETURNING *', [id]);
   return result.rows[0];
 };
 
