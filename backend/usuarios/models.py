@@ -14,10 +14,6 @@ class CustomUser(AbstractUser):
 
 
     id_usuario = models.AutoField(primary_key=True)
-    nombre_usuario = models.CharField(max_length=100, blank=True, null=True)
-    apellido_usuario = models.CharField(max_length=100, blank=True, null=True)
-    correo_usuario = models.EmailField(max_length=100, blank=True, null=True)
-    contrasena_usuario = models.CharField(max_length=100, blank=True, null=True)
     rol_usuario = models.ForeignKey(Roles, on_delete=models.CASCADE, db_column="id_rol", blank=True, null=True)
 
     class Meta:

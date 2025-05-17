@@ -18,6 +18,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
+from usuarios.views import list_roles, list_users
+
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/roles", list_roles),
+    path("api/users", list_users),
 ]
