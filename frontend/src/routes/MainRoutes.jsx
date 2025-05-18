@@ -3,6 +3,7 @@ import { lazy } from 'react';
 // project imports
 import Loadable from 'components/Loadable';
 import DashboardLayout from 'layout/Dashboard';
+import Eto from 'pages/ETo/Eto';
 
 // render- Dashboard
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
@@ -14,6 +15,7 @@ const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 
 // render - sample page
 const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')));
+
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -49,6 +51,10 @@ const MainRoutes = {
     {
       path: 'sample-page',
       element: <SamplePage />
+    },
+    {
+      path: 'eto',
+      element: <Eto />
     }
   ]
 };
