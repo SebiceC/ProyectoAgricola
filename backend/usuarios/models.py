@@ -11,8 +11,6 @@ class Roles(models.Model):
         db_table = "roles"
 
 class CustomUser(AbstractUser):
-
-
     id_usuario = models.AutoField(primary_key=True)
     rol_usuario = models.ForeignKey(Roles, on_delete=models.CASCADE, db_column="id_rol", blank=True, null=True)
 

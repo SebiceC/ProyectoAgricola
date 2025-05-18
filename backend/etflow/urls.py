@@ -16,12 +16,12 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
-
-from usuarios.views import list_roles, list_users
+from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/roles", list_roles),
-    path("api/users", list_users),
+    path("api/users/", include("usuarios.urls"), name = "app-usuarios"),
+    path("api/ubicaciones/", include("ubicaciones.urls"), name = "app-ubicaciones"),
+    path("api/riegos/", include("riegos.urls"), name = "app-riegos"),
+    path("api/cultivos/", include("cultivos.urls"), name = "app-cultivos"),
 ]
