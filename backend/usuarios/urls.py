@@ -1,9 +1,10 @@
-from django.urls import path
-from usuarios.views import RolesAPIView, CustomUserAPIView, RolesDetailAPIView, CustomUserDetailAPIView, CustomUserListView
+from rest_framework import routers
+from .api import RolesViewSet, CustomUserViewSet
 
-urlpatterns = [
-    path("roles", RolesAPIView.as_view(), name="roles-list"),
-    path("roles/<int:pk>", RolesDetailAPIView.as_view(), name="roles-detail"),
-    path("users", CustomUserAPIView.as_view(), name="users-list"),
-    path("users/<int:pk>", CustomUserDetailAPIView.as_view(), name="users-detail"),
-]
+
+router = routers.DefaultRouter()
+
+router.register("api/roles", RolesViewSet, "roles")
+router.register("api/usuarios", CustomUserViewSet, "usuarios")
+
+urlpatterns = router.urls

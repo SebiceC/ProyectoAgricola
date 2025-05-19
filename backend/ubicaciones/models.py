@@ -11,6 +11,9 @@ class Ubicacion(models.Model):
     class Meta:
         db_table = "ubicaciones"
 
+    def __str__(self):
+        return f"{self.nombre_ubicacion} ({self.latitud}, {self.longitud})"
+
 class Suelo(models.Model):
     id_suelo = models.AutoField(primary_key=True)
     nombre_suelo = models.CharField(max_length=100, blank=True, null=True)
@@ -37,6 +40,7 @@ class Precipitacion(models.Model):
 class Eto(models.Model):
     id_eto = models.AutoField(primary_key=True)
     id_ubicacion = models.ForeignKey("ubicaciones.Ubicacion", on_delete=models.CASCADE, db_column="id_ubicacion", blank=True, null=True)
+    fecha = models.DateField(blank=True, null=True)
     temperatura_maxima = models.FloatField(blank=True, null=True)
     temperatura_minima = models.FloatField(blank=True, null=True)
     humedad_relativa = models.FloatField(blank=True, null=True)
@@ -47,3 +51,9 @@ class Eto(models.Model):
 
     class Meta:
         db_table = "eto"
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"ETO {self.fecha} - {self.id_ubicacion.nombre_ubicacion}"
+
+        

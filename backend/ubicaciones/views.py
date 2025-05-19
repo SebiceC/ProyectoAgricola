@@ -1,10 +1,13 @@
 from django.shortcuts import render
-from .serializers import UbicacionSerializer, SueloSerializer, PrecipitacionSerializer, EtoSerializer
+from .serializers import UbicacionSerializer, SueloSerializer, PrecipitacionSerializer, EtoSerializer, EtoCalculationSerializer, NasaPowerRequestSerializer
 from .models import Ubicacion, Suelo, Precipitacion, Eto
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import generics
+from rest_framework import status
+from .services import NasaPowerService
+import logging
 
+logger = logging.getLogger(__name__)
 
 class UbicacionAPIView(APIView):
     """
@@ -205,3 +208,126 @@ class EtoDetailAPIView(APIView):
 
         eto.delete()
         return Response(status=204)
+    
+class EtoCalculationAPIView(APIView):
+    "api para calculo de evapotranspiracion ETO usando datos de nasa power"
+
+    def post(self, request):
+        """""
+        Calcula ETO para un rango de fechas y ubicacion especifica
+        
+        Parametros requeridos:
+        - id:ubicacion: ID de ubicacion registrada
+        - start_date: Fecha inicio (YYYY-MM-DD)"
+        - end_date: Fecha fin (YYYY-MM-DD)
+        """
+        serializer = EtoCalculationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        ubicacion = data["id_ubicacion"]
+
+        try:
+            service = NasaPowerService()
+
+            if not all ([ubicacion.latitud, ubicacion.longitud]):
+                raise ValueError("Ubicacion no tiene coordenadas definidas")
+            
+            eto_objects = service.calcular_eto(
+                ubicacion=ubicacion,
+                start_date=data["start_date"],
+                end_date=data["end_date"]
+            )
+
+            serializer = EtoSerializer(eto_objects, many=True)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+class EtoListView(APIView):
+    def get(self, request, ubicacion_id=None):
+        queryset = Eto.objects.all()
+        if ubicacion_id:
+            queryset = queryset.filter(id_ubicacion=ubicacion_id)
+
+        serializer = EtoSerializer(queryset.order_by("-fecha"), many=True)
+        return Response(serializer.data)
+
+class NasaPowerAPIView(APIView):
+    """
+    Esta clase maneja la solicitud a la API de NASA Power para obtener datos climáticos.
+    """
+    def post(self, request):
+        serializer = NasaPowerRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+
+        try:
+            service = NasaPowerService()
+            weather_data = service.get_weather_data(
+                latitude=data["latitud"],
+                longitude=data["longitud"],
+                start_date=data["start_date"],
+                end_date=data["end_date"],
+            )
+
+            processed_data = self._process_weather_data(weather_data)
+
+            return Response({
+                "status": "success",
+                "data": processed_data,
+                "metadata": {
+                    "latitud": data["latitud"],
+                    "longitud": data["longitud"],
+                    "date_range": {
+                        "start": data["start_date"].strftime("%Y-%m-%d"),
+                        "end": data["end_date"].strftime("%Y-%m-%d")
+                    }
+                }
+            })
+        
+        except Exception as e:
+            logger.error(f"Error al obtener datos de la API de NASA Power: {str(e)}", exc_info=True)
+            return Response(
+                {"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+    def _process_weather_data(self, raw_data):
+        """
+        Procesa los datos crudos de la API para un formato mas amigable
+        """
+        parameters = raw_data.get("properties", {}).get("parameter", {})
+        processed = {}
+
+        for param, values in parameters.items():
+            processed[param] = {
+                "unit": self._get_parameter_unit(param),
+                "values": [
+                    {"date": date.strftime("%Y-%m-%d"), "value": value}
+                    for date, value in values.items()
+                ]
+            }
+            
+        return processed
+
+    def _get_parameter_unit(self, parameter):
+        """
+        Devuelve las unidades para cada parametro
+        """
+        units = {
+            "T2M_MAX": "°C",
+            "T2M_MIN": "°C",
+            "RH2M": "%",
+            "WS2M": "m/s",
+            "ALLSKY_SFC_SW_DWN": "W/m²",
+            "PRECTOTCORR": "mm"
+        }
+        return units.get(parameter, "unknown")
+
