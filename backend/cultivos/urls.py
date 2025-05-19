@@ -1,9 +1,12 @@
-from django.urls import path
-from cultivos.views import CultivosAPIView, CultivosDetailAPIView, CultivoSueloListView, CultivoUbicacionListView
-urlpatterns = [
-    path("cultivos", CultivosAPIView.as_view(), name="cultivos-list"),
-    path("cultivos/<int:pk>", CultivosDetailAPIView.as_view(), name="cultivos-detail"),
-    path("cultivos/suelo/<int:suelo_id>", CultivoSueloListView.as_view(), name="cultivo-suelo-list"),
-    path("cultivos/ubicacion/<int:ubicacion_id>", CultivoUbicacionListView.as_view(), name="cultivo-ubicacion-list"),
-]
+from rest_framework import routers
+from .api import CultivosViewSet, EtapaViewSet, CultivoSueloViewSet, CultivoUbicacionViewSet
 
+router = routers.DefaultRouter()
+
+router.register("api/cultivos", CultivosViewSet, basename="cultivos")
+router.register("api/etapa", EtapaViewSet, basename="etapa")
+router.register("api/cultivosuelo", CultivoSueloViewSet, basename="cultivosuelo")
+router.register("api/cultivoubicacion", CultivoUbicacionViewSet, basename="cultivoubicacion")
+
+
+urlpatterns = router.urls

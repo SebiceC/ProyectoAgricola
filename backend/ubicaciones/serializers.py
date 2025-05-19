@@ -23,7 +23,7 @@ class EtoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Eto
-        fields = ["id_eto", "id_ubicacion", "fecha", "temperatura_maxima", "temperatura_minima", "humedad_relativa", "velocidad_viento", "horas_insolacion", "precipitacion", "evapotranspiracion_potencial"]
+        fields = ["id_eto", "ubicacion", "id_ubicacion", "fecha", "temperatura_maxima", "temperatura_minima", "humedad_relativa", "velocidad_viento", "horas_insolacion", "precipitacion", "evapotranspiracion_potencial"]
         
 class EtoCalculationSerializer(serializers.ModelSerializer):
     id_ubicacion = serializers.PrimaryKeyRelatedField(queryset=Ubicacion.objects.all())
