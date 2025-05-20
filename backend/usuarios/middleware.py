@@ -3,6 +3,9 @@ from django.conf import settings
 from .services import AuthService
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from django.utils.functional import SimpleLazyObject
+from django.contrib.auth.middleware import get_user
+from django.contrib.auth.models import AnonymousUser
 
 class JWTAuthenticationMiddleware(MiddlewareMixin):
     def process_request(self, request):
@@ -41,4 +44,21 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
         except (InvalidToken, TokenError):
             return None
 
-        return None 
+        request.user = SimpleLazyObject(lambda: self.__class__.get_jwt_user(request))
+        return None
+
+    @staticmethod
+    def get_jwt_user(request):
+        user = get_user(request)
+        if user.is_authenticated:
+            return user
+        
+        jwt_authentication = JWTAuthentication()
+        if jwt_authentication.get_header(request):
+            try:
+                user_auth_tuple = jwt_authentication.authenticate(request)
+                if user_auth_tuple is not None:
+                    return user_auth_tuple[0]
+            except Exception:
+                pass
+        return AnonymousUser() 

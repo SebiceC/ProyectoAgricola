@@ -22,14 +22,10 @@ class Roles(models.Model):
         verbose_name = "Roles"
 
 class CustomUser(AbstractUser):
-<<<<<<< HEAD
-    id_usuario = models.AutoField(primary_key=True)
-=======
     """
     Usuario personalizado que extiende el modelo de usuario de Django.
     """
     id = models.AutoField(primary_key=True)
->>>>>>> 52e6676 (feat: actualiza requirements.txt y configura manejo de finales de línea)
     rol_usuario = models.ForeignKey(Roles, on_delete=models.CASCADE, db_column="id_rol", blank=True, null=True)
     document_id = models.CharField(max_length=30, blank=True, null=True, verbose_name="Documento de identidad")
     fecha_nacimiento = models.DateField(blank=True, null=True, verbose_name="Fecha de nacimiento")

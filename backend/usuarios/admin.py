@@ -2,10 +2,6 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, Roles
 
-<<<<<<< HEAD
-
-admin.site.register(CustomUser, UserAdmin)
-=======
 @admin.register(Roles)
 class RolesAdmin(admin.ModelAdmin):
     list_display = ('nombre_rol', 'descripcion_rol', 'permisos_rol')
@@ -45,4 +41,3 @@ class CustomUserAdmin(UserAdmin):
             ),
         }),
     )
->>>>>>> 52e6676 (feat: actualiza requirements.txt y configura manejo de finales de línea)
