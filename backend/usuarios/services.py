@@ -21,7 +21,7 @@ class AuthService:
                 'email': user.email,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
-                'rol': user.rol_usuario.nombre_rol if user.rol_usuario else None
+                'groups': list(user.groups.values_list('name', flat=True))  # Lista de nombres de grupos
             }
         }
 

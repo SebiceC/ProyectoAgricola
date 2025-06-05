@@ -15,7 +15,7 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
         # Lista de rutas que no requieren autenticación
         public_paths = [
             '/api/login/',
-            '/api/registro/',
+            '/api/register/',
             '/api/verify-otp/',
             '/api/refresh-token/',
         ]

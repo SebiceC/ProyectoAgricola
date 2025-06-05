@@ -74,8 +74,10 @@ class UserViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
+            print(f"Autenticando: email={email}, password={password}")
             user = authenticate(username=email, password=password)
-            
+            print("Usuario encontrado:", user)
+
             if user:
                 if user.is_active:
                     # Generar y enviar OTP

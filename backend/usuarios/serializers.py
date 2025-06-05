@@ -1,14 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Roles
 import re
+from django.contrib.auth.models import Group  # <-- Añade este import
 
 User = get_user_model()
 
-class RolesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Roles
-        fields = ['id_rol', 'nombre_rol', 'descripcion_rol', 'permisos_rol']
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
@@ -58,7 +54,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
     pais = serializers.CharField(required=False, allow_blank=True)
     institucion = serializers.CharField(required=False, allow_blank=True)
-    tipo_usuario = serializers.CharField(required=False, allow_blank=True)
     carrera = serializers.CharField(required=False, allow_blank=True)
     telefono = serializers.CharField(required=False, allow_blank=True)
 
@@ -66,8 +61,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'email', 'password', 'password2',
-            'document_id', 'fecha_nacimiento', 'pais', 'institucion',
-            'tipo_usuario', 'carrera', 'telefono'
+            'document_id', 'fecha_nacimiento', 'pais', 'institucion', 'carrera', 'telefono'
         ]
 
     def validate_email(self, value):
@@ -143,23 +137,24 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Asignar el rol 'Usuario' automáticamente
-        rol_usuario = Roles.objects.get(nombre_rol='Usuario')
         user = User(
             username=validated_data['email'],
             email=validated_data['email'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
-            rol_usuario=rol_usuario,
             document_id=validated_data.get('document_id', ''),
             fecha_nacimiento=validated_data.get('fecha_nacimiento'),
             pais=validated_data.get('pais', ''),
             institucion=validated_data.get('institucion', ''),
-            tipo_usuario=validated_data.get('tipo_usuario', ''),
             carrera=validated_data.get('carrera', ''),
             telefono=validated_data.get('telefono', '')
         )
         user.set_password(validated_data['password'])
         user.save()
+
+        # Asigna grupo "Usuario" por defecto
+        grupo_usuario = Group.objects.get(name='User')  # Asegúrate de que exista
+        user.groups.add(grupo_usuario)
         return user
 
 class LoginSerializer(serializers.Serializer):
