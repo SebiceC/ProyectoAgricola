@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.decorators import action, permission_classes
+from rest_framework.decorators import action, permission_classes, api_view
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .serializers import UserRegisterSerializer, LoginSerializer, OTPVerificationSerializer
 from django.contrib.auth import authenticate, get_user_model
@@ -14,6 +14,8 @@ from django.core.cache import cache
 import random
 import string
 from django.conf import settings
+import requests
+
 
 User = get_user_model()
 
@@ -249,3 +251,4 @@ class UserViewSet(viewsets.ModelViewSet):
             'status': 'error',
             'message': 'No hay sesión activa'
         }, status=status.HTTP_401_UNAUTHORIZED)
+    
