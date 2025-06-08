@@ -110,7 +110,7 @@ const RolesManagement = () => {
               <TableRow>
                 <TableCell>ID</TableCell>
                 <TableCell>Role Name</TableCell>
-                <TableCell>Role Name</TableCell>
+                <TableCell>Permisos</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
