@@ -8,4 +8,5 @@ router.register("api/precipitacion", PrecipitacionViewSet, basename="precipitaci
 router.register("api/eto", EtoViewSet, basename="eto")
 router.register("api/evapotranspiracion", EvapotranspirationViewSet, basename="evapotranspiracion")
 
+
 urlpatterns = router.urls
