@@ -156,6 +156,38 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         grupo_usuario = Group.objects.get(name='User')  # Asegúrate de que exista
         user.groups.add(grupo_usuario)
         return user
+    
+    def update(self, instance, validated_data):
+        """
+        Método para actualizar una instancia existente de User.
+        Parámetros:
+            instance: Instancia del modelo User que se va a actualizar
+            validated_data: Diccionario con los datos ya validados
+        """
+        # 1. Actualizar campos básicos
+        instance.first_name = validated_data.get('first_name', instance.first_name)
+        instance.last_name = validated_data.get('last_name', instance.last_name)
+        instance.email = validated_data.get('email', instance.email)
+        
+        # 2. Actualizar campos adicionales del CustomUser
+        instance.document_id = validated_data.get('document_id', instance.document_id)
+        instance.fecha_nacimiento = validated_data.get('fecha_nacimiento', instance.fecha_nacimiento)
+        instance.pais = validated_data.get('pais', instance.pais)
+        instance.institucion = validated_data.get('institucion', instance.institucion)
+        instance.carrera = validated_data.get('carrera', instance.carrera)
+        instance.telefono = validated_data.get('telefono', instance.telefono)
+        
+        # 3. Manejar actualización de contraseña si se proporciona
+        password = validated_data.get('password', None)
+        if password:
+            instance.set_password(password)
+        
+        # 4. Guardar los cambios
+        instance.save()
+        
+        # 5. Retornar la instancia actualizada
+        return instance
+
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(
@@ -193,3 +225,5 @@ class OTPVerificationSerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError('El código OTP debe contener solo números.')
         return value
+    
+    
