@@ -269,37 +269,7 @@ class UserViewSet(viewsets.ModelViewSet):
             'status': 'success',
             'data': serializer.data
         }, status=status.HTTP_200_OK)
-
-    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
-    def create_user(self, request):
-        """
-        Crea un nuevo usuario (solo para administradores)
-        """
-        if not request.user.is_superuser:
-            return Response({
-                'status': 'error',
-                'message': 'No tienes permiso para realizar esta acción'
-            }, status=status.HTTP_403_FORBIDDEN)
-
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response({
-                'status': 'success',
-                'message': 'Usuario creado exitosamente',
-                'data': {
-                    'id': user.id,
-                    'email': user.email,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name
-                }
-            }, status=status.HTTP_201_CREATED)
-        return Response({
-            'status': 'error',
-            'message': 'Error de validación',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
+    
     @action(detail=True, methods=['put'], permission_classes=[IsAuthenticated])
     def update_user(self, request, pk=None):
         """

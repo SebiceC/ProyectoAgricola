@@ -7,29 +7,6 @@ User = get_user_model()
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(
-        write_only=True, 
-        min_length=8,
-        error_messages={
-            'blank': 'La contraseña no puede estar vacía.',
-            'min_length': 'La contraseña debe tener al menos 8 caracteres.'
-        }
-    )
-    password2 = serializers.CharField(
-        write_only=True, 
-        min_length=8,
-        error_messages={
-            'blank': 'La confirmación de contraseña no puede estar vacía.',
-            'min_length': 'La confirmación de contraseña debe tener al menos 8 caracteres.'
-        }
-    )
-    email = serializers.EmailField(
-        required=True,
-        error_messages={
-            'blank': 'El correo electrónico no puede estar vacío.',
-            'invalid': 'Ingrese un correo electrónico válido.'
-        }
-    )
     first_name = serializers.CharField(
         required=True, 
         min_length=2, 
@@ -50,12 +27,57 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             'max_length': 'El apellido no puede tener más de 50 caracteres.'
         }
     )
-    document_id = serializers.CharField(required=False, allow_blank=True)
-    fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
-    pais = serializers.CharField(required=False, allow_blank=True)
+    document_id = serializers.CharField(
+        required=True,
+        error_messages={
+            'blank': 'El documento de identidad no puede estar vacío.'
+        }
+    )
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            'blank': 'El correo electrónico no puede estar vacío.',
+            'invalid': 'Ingrese un correo electrónico válido.'
+        }
+    )
+    password = serializers.CharField(
+        write_only=True, 
+        min_length=8,
+        error_messages={
+            'blank': 'La contraseña no puede estar vacía.',
+            'min_length': 'La contraseña debe tener al menos 8 caracteres.'
+        }
+    )
+    password2 = serializers.CharField(
+        write_only=True, 
+        min_length=8,
+        error_messages={
+            'blank': 'La confirmación de contraseña no puede estar vacía.',
+            'min_length': 'La confirmación de contraseña debe tener al menos 8 caracteres.'
+        }
+    )
+    
+    fecha_nacimiento = serializers.DateField(
+        required=True,
+        error_messages={
+            'blank': 'La fecha de nacimiento no puede estar vacía.',
+            'invalid': 'Ingrese una fecha válida.'
+        }
+    )
+    pais = serializers.CharField(
+        required=True,
+        error_messages={
+            'blank': 'El país no puede estar vacío.'
+        }
+    )
     institucion = serializers.CharField(required=False, allow_blank=True)
     carrera = serializers.CharField(required=False, allow_blank=True)
-    telefono = serializers.CharField(required=False, allow_blank=True)
+    telefono = serializers.CharField(
+        required=True,
+        error_messages={
+            'blank': 'El teléfono no puede estar vacío.'
+        }
+    )
 
     class Meta:
         model = User
@@ -153,7 +175,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.save()
 
         # Asigna grupo "Usuario" por defecto
-        grupo_usuario = Group.objects.get(name='User')  # Asegúrate de que exista
+        grupo_usuario = Group.objects.get(name='Usuario')  # Asegúrate de que exista
         user.groups.add(grupo_usuario)
         return user
     
