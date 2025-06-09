@@ -14,8 +14,6 @@ from pathlib import Path
 from datetime import timedelta
 import os
 import dj_database_url
-from dotenv import load_dotenv
-load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,13 +23,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY', default='your-secret-key')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = 'RENDER ' not in os.environ
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') 
-print("ALLOWED_HOSTS:", ALLOWED_HOSTS)  # Verifica en la consola al iniciar el servidor
+ALLOWED_HOSTS = ['etflow.onrender.com']
+
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')  
+
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Application definition
 
@@ -56,6 +58,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  
     "django.middleware.common.CommonMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -92,8 +95,8 @@ WSGI_APPLICATION = "etflow.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600
+        default='postgresql://etflow_admin_real:vxsAZebsP5RQzy59jB9RFl70ES0sRRN1@dpg-d12r6lruibrs73fhi470-a.virginia-postgres.render.com/etflowdb',
+        conn_max_age=600,
     )
 }
 
@@ -133,7 +136,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # ← Añade esta línea
+if not DEBUG:
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') 
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage' 
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
