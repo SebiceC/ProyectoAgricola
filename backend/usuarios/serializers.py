@@ -5,6 +5,10 @@ from django.contrib.auth.models import Group  # <-- Añade este import
 
 User = get_user_model()
 
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['name']
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(
@@ -79,19 +83,21 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         }
     )
 
+    groups = GroupSerializer(many=True, read_only=True)
+
+
+    user_permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
-            'first_name', 'last_name', 'email', 'password', 'password2',
-            'document_id', 'fecha_nacimiento', 'pais', 'institucion', 'carrera', 'telefono'
+            'id', 'first_name', 'last_name', 'email', 'password', 'password2',
+            'document_id', 'fecha_nacimiento', 'pais', 'institucion', 'carrera', 'telefono', 'groups', 'user_permissions'
         ]
+        extra_kwargs = {
+            'groups': {'read_only': True},
+        }
 
-    def validate_email(self, value):
-        if not value or not value.strip():
-            raise serializers.ValidationError('El correo electrónico no puede estar vacío.')
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError('Este correo ya está registrado.')
-        return value
 
     def validate_password(self, value):
         if not value or not value.strip():
@@ -155,10 +161,14 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['password'] != data['password2']:
             raise serializers.ValidationError({'password2': 'Las contraseñas no coinciden.'})
+        if User.objects.filter(email=data['email']).exists():
+            raise serializers.ValidationError({'email': 'Este correo ya está registrado.'})
+
         return data
 
     def create(self, validated_data):
         # Asignar el rol 'Usuario' automáticamente
+        groups_data = validated_data.pop('groups', None)
         user = User(
             username=validated_data['email'],
             email=validated_data['email'],
@@ -174,9 +184,15 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
 
-        # Asigna grupo "Usuario" por defecto
-        grupo_usuario = Group.objects.get(name='Usuario')  # Asegúrate de que exista
-        user.groups.add(grupo_usuario)
+        if groups_data:
+            user.groups.set(groups_data)
+        else:
+            try:
+                grupo_usuario = Group.objects.get(name='Usuario')
+                user.groups.add(grupo_usuario)
+            except Group.DoesNotExist:
+                pass
+
         return user
     
     def update(self, instance, validated_data):
@@ -186,6 +202,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             instance: Instancia del modelo User que se va a actualizar
             validated_data: Diccionario con los datos ya validados
         """
+        groups_data = validated_data.pop('groups', None)
         # 1. Actualizar campos básicos
         instance.first_name = validated_data.get('first_name', instance.first_name)
         instance.last_name = validated_data.get('last_name', instance.last_name)
@@ -206,10 +223,15 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         
         # 4. Guardar los cambios
         instance.save()
+
+        if groups_data is not None:
+            instance.groups.set(groups_data)
         
         # 5. Retornar la instancia actualizada
         return instance
-
+    
+    def get_user_permissions(self, obj):
+        return list (obj.get_all_permissions())
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(
@@ -247,5 +269,15 @@ class OTPVerificationSerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError('El código OTP debe contener solo números.')
         return value
+
     
-    
+class UserWithGroupSerializer(serializers.ModelSerializer):
+    groups = GroupSerializer(many=True)
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'document_id', 'fecha_nacimiento', 'pais', 'institucion',
+            'carrera', 'telefono', 'groups'
+        ]
+        read_only_fields = ['id', 'username']  # Hacer el ID y el username de solo lectura

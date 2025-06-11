@@ -255,9 +255,10 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def list_users(self, request):
         """
-        Lista todos los usuarios (solo para administradores)
+        Lista todos los usuarios
         """
-        if not request.user.is_superuser:
+        if not request.user.groups.filter(name='Administrador').exists():
+
             return Response({
                 'status': 'error',
                 'message': 'No tienes permiso para realizar esta acción'
@@ -270,6 +271,22 @@ class UserViewSet(viewsets.ModelViewSet):
             'data': serializer.data
         }, status=status.HTTP_200_OK)
     
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def list_user_by_id(self, request, pk=None):
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            serializer = self.get_serializer(user)
+            return Response({
+                'status': 'success',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+
     @action(detail=True, methods=['put'], permission_classes=[IsAuthenticated])
     def update_user(self, request, pk=None):
         """
@@ -279,10 +296,10 @@ class UserViewSet(viewsets.ModelViewSet):
             user = CustomUser.objects.get(pk=pk)
             
             # Solo el propio usuario o un admin puede actualizar
-            if not (request.user == user or request.user.is_superuser):
+            if request.user != user:
                 return Response({
                     'status': 'error',
-                    'message': 'No tienes permiso para actualizar este usuario'
+                    'message': 'Solo puedes actualizar tu propio perfil'
                 }, status=status.HTTP_403_FORBIDDEN)
 
             serializer = self.get_serializer(user, data=request.data, partial=True)
