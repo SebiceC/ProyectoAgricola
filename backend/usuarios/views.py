@@ -321,12 +321,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 'message': 'Usuario no encontrado'
             }, status=status.HTTP_404_NOT_FOUND)
 
+
     @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
     def delete_user(self, request, pk=None):
         """
         Elimina un usuario (solo para administradores)
         """
-        if not request.user.is_superuser:
+        if not request.user.groups.filter(name='Administrador').exists():
+
             return Response({
                 'status': 'error',
                 'message': 'No tienes permiso para realizar esta acción'

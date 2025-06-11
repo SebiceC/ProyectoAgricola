@@ -159,11 +159,12 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def validate(self, data):
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError({'password2': 'Las contraseñas no coinciden.'})
-        if User.objects.filter(email=data['email']).exists():
-            raise serializers.ValidationError({'email': 'Este correo ya está registrado.'})
+        password = data.get('password')
+        password2 = data.get('password2')
 
+        if password != password2:
+            if password != password2:
+                raise serializers.ValidationError({"password2": "Las contraseñas no coinciden."})
         return data
 
     def create(self, validated_data):
