@@ -9,6 +9,7 @@ import Eto from 'pages/ETo/Eto';
 import UsersManagement from 'pages/admin/UsersManagement';
 import RolesManagement from 'pages/admin/RolesManagement';
 import ErrorBoundary from 'components/ErrorBoundary';
+import Configuration from 'pages/settings/Configuration'; // Nueva importación
 
 // render - dashboard
 const DashboardDefault = Loadable(lazy(() => import('pages/dashboard/default')));
@@ -18,6 +19,9 @@ const Color = Loadable(lazy(() => import('pages/component-overview/color')));
 const Typography = Loadable(lazy(() => import('pages/component-overview/typography')));
 const Shadow = Loadable(lazy(() => import('pages/component-overview/shadows')));
 const SamplePage = Loadable(lazy(() => import('pages/extra-pages/sample-page')));
+
+
+// ==============================|| MAIN ROUTING ||============================== //
 
 const MainRoutes = {
   path: '/',
@@ -58,11 +62,17 @@ const MainRoutes = {
     },
     {
       path: 'eto',
-      element: (
-        <ErrorBoundary>
-          <Eto />
-        </ErrorBoundary>
-      )
+      element: <Eto />
+    },
+    // Nueva sección de Settings
+    {
+      path: 'settings',
+      children: [
+        {
+          path: 'configuration',
+          element: <Configuration />
+        }
+      ]
     }
   ]
 };

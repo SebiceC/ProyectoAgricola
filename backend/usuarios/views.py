@@ -252,3 +252,97 @@ class UserViewSet(viewsets.ModelViewSet):
             'message': 'No hay sesión activa'
         }, status=status.HTTP_401_UNAUTHORIZED)
     
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def list_users(self, request):
+        """
+        Lista todos los usuarios
+        """
+        if not request.user.groups.filter(name='Administrador').exists():
+
+            return Response({
+                'status': 'error',
+                'message': 'No tienes permiso para realizar esta acción'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        users = CustomUser.objects.all()
+        serializer = self.get_serializer(users, many=True)
+        return Response({
+            'status': 'success',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def list_user_by_id(self, request, pk=None):
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            serializer = self.get_serializer(user)
+            return Response({
+                'status': 'success',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+
+    @action(detail=True, methods=['put'], permission_classes=[IsAuthenticated])
+    def update_user(self, request, pk=None):
+        """
+        Actualiza un usuario existente
+        """
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            
+            # Solo el propio usuario o un admin puede actualizar
+            if request.user != user:
+                return Response({
+                    'status': 'error',
+                    'message': 'Solo puedes actualizar tu propio perfil'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            serializer = self.get_serializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    'status': 'success',
+                    'message': 'Usuario actualizado exitosamente',
+                    'data': serializer.data
+                }, status=status.HTTP_200_OK)
+            return Response({
+                'status': 'error',
+                'message': 'Error de validación',
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except CustomUser.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+
+    @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
+    def delete_user(self, request, pk=None):
+        """
+        Elimina un usuario (solo para administradores)
+        """
+        if not request.user.groups.filter(name='Administrador').exists():
+
+            return Response({
+                'status': 'error',
+                'message': 'No tienes permiso para realizar esta acción'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            user.delete()
+            return Response({
+                'status': 'success',
+                'message': 'Usuario eliminado exitosamente'
+            }, status=status.HTTP_204_NO_CONTENT)
+        except CustomUser.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Usuario no encontrado'
+            }, status=status.HTTP_404_NOT_FOUND)

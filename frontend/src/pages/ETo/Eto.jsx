@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 // material-ui
 import Typography from '@mui/material/Typography';
@@ -27,33 +27,57 @@ const months = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-// Valores iniciales de ejemplo
-const initialClimateData = months.map((month) => ({
-  month,
-  tempMin: '',
-  tempMax: '',
-  humidity: '',
-  wind: '',
-  sunshine: '',
-  radiation: null,
-  eto: null
-}));
-
-// Reglas de validación
-const validationRules = {
-  country: { max: 20, message: "País: máximo 20 caracteres" },
-  station: { max: 20, message: "Estación: máximo 20 caracteres" },
-  altitude: { min: -200, max: 9999, message: "Altitud: debe estar entre -200 y 9999" },
-  latitude: { min: 1, max: 90, message: "Latitud: debe estar entre 1 y 90" },
-  longitude: { min: 1, max: 180, message: "Longitud: debe estar entre 1 y 180" },
-  tempMin: { min: -80, max: 40, message: "Temperatura mínima: debe estar entre -80°C y 40°C" },
-  tempMax: { min: -40, max: 60, message: "Temperatura máxima: debe estar entre -40°C y 60°C" },
-  humidity: { min: 1, max: 99, message: "Humedad: debe estar entre 1% y 99%" },
-  wind: { min: 1, max: 9, message: "Viento: debe estar entre 1 y 9 m/s" },
-  sunshine: { min: 1, max: 24, message: "Insolación: debe estar entre 1 y 24 horas" }
+// Configuración por defecto
+const defaultConfig = {
+  etoCalculationMethod: 'full_climate_data',
+  temperatureMode: 'min_max',
+  humidityUnit: 'relative_percent',
+  windSpeedUnit: 'meters_per_second',
+  sunshineUnit: 'hours',
+  etoUnit: 'mm_per_day'
 };
 
 export default function Eto() {
+  const [config, setConfig] = useState(defaultConfig);
+  
+  // Cargar configuración desde localStorage
+  useEffect(() => {
+    try {
+      const savedConfig = localStorage.getItem('etoCalculatorConfig');
+      if (savedConfig) {
+        const parsedConfig = JSON.parse(savedConfig);
+        if (parsedConfig.climateEto) {
+          setConfig(parsedConfig.climateEto);
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando configuración:', error);
+    }
+  }, []);
+
+  // Valores iniciales basados en configuración
+  const getInitialClimateData = useCallback(() => {
+    return months.map((month) => ({
+      month,
+      // Campos de temperatura según configuración
+      ...(config.temperatureMode === 'min_max' 
+        ? { tempMin: '', tempMax: '' }
+        : { tempAvg: '' }
+      ),
+      // Campos según método de cálculo
+      ...(config.etoCalculationMethod === 'full_climate_data' 
+        ? { 
+            humidity: '', 
+            wind: '', 
+            sunshine: '' 
+          }
+        : {}
+      ),
+      radiation: null,
+      eto: null
+    }));
+  }, [config.temperatureMode, config.etoCalculationMethod]);
+
   const [stationInfo, setStationInfo] = useState({
     country: '',
     station: '24570',
@@ -64,33 +88,132 @@ export default function Eto() {
     longDirection: 'W'
   });
 
-  const [climateData, setClimateData] = useState(initialClimateData);
+  const [inputClimateData, setInputClimateData] = useState(() => getInitialClimateData());
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("Valor fuera de rango");
   const [alertTitle, setAlertTitle] = useState("Error de Validación");
 
+  // Actualizar datos cuando cambie la configuración
+  useEffect(() => {
+    setInputClimateData(getInitialClimateData());
+  }, [getInitialClimateData]);
+
+  // Reglas de validación dinámicas basadas en configuración
+  const getValidationRules = useMemo(() => {
+    const baseRules = {
+      country: { max: 20, message: "País: máximo 20 caracteres" },
+      station: { max: 20, message: "Estación: máximo 20 caracteres" },
+      altitude: { min: -200, max: 9999, message: "Altitud: debe estar entre -200 y 9999" },
+      latitude: { min: 1, max: 90, message: "Latitud: debe estar entre 1 y 90" },
+      longitude: { min: 1, max: 180, message: "Longitud: debe estar entre 1 y 180" }
+    };
+
+    // Validaciones de temperatura según modo
+    if (config.temperatureMode === 'min_max') {
+      baseRules.tempMin = { min: -80, max: 40, message: "Temperatura mínima: debe estar entre -80°C y 40°C" };
+      baseRules.tempMax = { min: -40, max: 60, message: "Temperatura máxima: debe estar entre -40°C y 60°C" };
+    } else {
+      baseRules.tempAvg = { min: -60, max: 50, message: "Temperatura media: debe estar entre -60°C y 50°C" };
+    }
+
+    // Validaciones adicionales para método completo
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      // Humedad según unidad
+      if (config.humidityUnit === 'relative_percent') {
+        baseRules.humidity = { min: 1, max: 99, message: "Humedad: debe estar entre 1% y 99%" };
+      } else {
+        baseRules.humidity = { min: 0.1, max: 5.0, message: "Presión de vapor: debe estar entre 0.1 y 5.0 kPa" };
+      }
+
+      // Viento según unidad
+      if (config.windSpeedUnit === 'meters_per_second') {
+        baseRules.wind = { min: 0.1, max: 15, message: "Viento: debe estar entre 0.1 y 15 m/s" };
+      } else {
+        baseRules.wind = { min: 8.6, max: 1296, message: "Viento: debe estar entre 8.6 y 1296 km/día" };
+      }
+
+      // Insolación según unidad
+      if (config.sunshineUnit === 'hours') {
+        baseRules.sunshine = { min: 0, max: 24, message: "Insolación: debe estar entre 0 y 24 horas" };
+      } else if (config.sunshineUnit === 'percentage_day_duration') {
+        baseRules.sunshine = { min: 0, max: 100, message: "Insolación: debe estar entre 0 y 100%" };
+      } else {
+        baseRules.sunshine = { min: 0, max: 1, message: "Insolación: debe estar entre 0 y 1" };
+      }
+    }
+
+    return baseRules;
+  }, [config]);
+
+  // Obtener etiquetas y unidades según configuración
+  const getFieldLabels = useMemo(() => {
+    const labels = {};
+    
+    // Temperatura
+    if (config.temperatureMode === 'min_max') {
+      labels.tempMin = 'Temp Min\n°C';
+      labels.tempMax = 'Temp Max\n°C';
+    } else {
+      labels.tempAvg = 'Temp Media\n°C';
+    }
+
+    // Humedad
+    if (config.humidityUnit === 'relative_percent') {
+      labels.humidity = 'Humedad\n%';
+    } else {
+      labels.humidity = 'Presión Vapor\nkPa';
+    }
+
+    // Viento
+    if (config.windSpeedUnit === 'meters_per_second') {
+      labels.wind = 'Viento\nm/s';
+    } else {
+      labels.wind = 'Viento\nkm/día';
+    }
+
+    // Insolación
+    if (config.sunshineUnit === 'hours') {
+      labels.sunshine = 'Insolación\nhoras';
+    } else if (config.sunshineUnit === 'percentage_day_duration') {
+      labels.sunshine = 'Insolación\n%';
+    } else {
+      labels.sunshine = 'Insolación\nfracción';
+    }
+
+    // ETo
+    if (config.etoUnit === 'mm_per_day') {
+      labels.eto = 'ETo\nmm/día';
+    } else {
+      labels.eto = 'ETo\nmm/período';
+    }
+
+    labels.radiation = 'Rad\nMJ/m²/día';
+
+    return labels;
+  }, [config]);
+
   // Función para mostrar alerta
-  const showAlert = (message, title = "Error de Validación") => {
+  const showAlert = useCallback((message, title = "Error de Validación") => {
     setAlertMessage(message);
     setAlertTitle(title);
     setAlertOpen(true);
-  };
+  }, []);
 
   // Cierra el modal de alerta
-  const handleAlertClose = () => {
+  const handleAlertClose = useCallback(() => {
     setAlertOpen(false);
-  };
+  }, []);
 
   // Función de validación genérica
-  const validateValue = (value, rule, fieldName) => {
-    // Para campos de texto con longitud máxima
+  const validateValue = useCallback((value, rule, fieldName) => {
+    const validationRules = getValidationRules;
+    
     if (rule.max && typeof value === 'string' && !rule.min) {
       if (value.length > rule.max) {
         showAlert(rule.message);
         return false;
       }
     } 
-    // Para campos numéricos con min y max
     else if ((rule.min !== undefined || rule.max !== undefined) && !isNaN(parseFloat(value))) {
       const numValue = parseFloat(value);
       if (numValue < rule.min || numValue > rule.max) {
@@ -99,183 +222,339 @@ export default function Eto() {
       }
     }
     return true;
-  };
+  }, [getValidationRules, showAlert]);
 
   // Actualizar datos de la estación con validación
-  const updateStationInfo = (field, value) => {
+  const updateStationInfo = useCallback((field, value) => {
+    const validationRules = getValidationRules;
     if (validationRules[field]) {
       if (!validateValue(value, validationRules[field], field)) {
         return;
       }
     }
 
-    setStationInfo({ ...stationInfo, [field]: value });
-  };
+    setStationInfo(prev => ({ ...prev, [field]: value }));
+  }, [validateValue, getValidationRules]);
 
   // Actualizar un valor para un mes específico con validación
-  const updateMonthData = (monthIndex, field, value) => {
+  const updateMonthData = useCallback((monthIndex, field, value) => {
+    const validationRules = getValidationRules;
     if (validationRules[field]) {
       if (!validateValue(value, validationRules[field], field)) {
         return;
       }
     }
 
-    const newClimateData = [...climateData];
-    newClimateData[monthIndex][field] = value;
-    setClimateData(newClimateData);
-  };
+    setInputClimateData(prev => {
+      const newData = [...prev];
+      newData[monthIndex] = { ...newData[monthIndex], [field]: value };
+      return newData;
+    });
+  }, [validateValue, getValidationRules]);
 
   // Verificar si debemos calcular la radiación y ETo
-  const shouldCalculateRadiationAndEto = (data) => {
-    return (
-      data.sunshine !== '' && 
-      parseFloat(data.sunshine) > 0 &&
-      data.tempMin !== '' && 
-      data.tempMax !== '' && 
-      data.humidity !== '' && 
-      data.wind !== ''
-    );
+  const shouldCalculateRadiationAndEto = useCallback((data) => {
+    // Para método de temperatura solamente
+    if (config.etoCalculationMethod === 'temperature_only') {
+      if (config.temperatureMode === 'min_max') {
+        return data.tempMin !== '' && data.tempMax !== '';
+      } else {
+        return data.tempAvg !== '';
+      }
+    }
+    
+    // Para método completo
+    if (config.temperatureMode === 'min_max') {
+      return (
+        data.tempMin !== '' && 
+        data.tempMax !== '' && 
+        data.humidity !== '' && 
+        data.wind !== '' && 
+        data.sunshine !== ''
+      );
+    } else {
+      return (
+        data.tempAvg !== '' && 
+        data.humidity !== '' && 
+        data.wind !== '' && 
+        data.sunshine !== ''
+      );
+    }
+  }, [config]);
+
+  // Convertir unidades según configuración
+  const convertToStandardUnits = useCallback((data) => {
+    const converted = { ...data };
+
+    // Convertir viento a m/s si está en km/día
+    if (config.windSpeedUnit === 'kilometers_per_day' && data.wind !== '') {
+      converted.wind = parseFloat(data.wind) / 86.4; // km/día to m/s
+    }
+
+    // Convertir insolación a horas si es necesario
+    if (data.sunshine !== '') {
+      const sunshineValue = parseFloat(data.sunshine);
+      if (config.sunshineUnit === 'percentage_day_duration') {
+        // Convertir porcentaje a horas (asumiendo 12 horas de día promedio)
+        converted.sunshine = (sunshineValue / 100) * 12;
+      } else if (config.sunshineUnit === 'fraction_day_duration') {
+        // Convertir fracción a horas
+        converted.sunshine = sunshineValue * 12;
+      }
+    }
+
+    return converted;
+  }, [config]);
+
+  // Función para calcular radiación y ETo
+  const calculateRadiationAndEto = useCallback((data, monthIndex, latitude, altitude) => {
+    try {
+      const convertedData = convertToStandardUnits(data);
+      const latitudeRad = parseFloat(latitude) * (Math.PI / 180);
+      const dayOfYear = Math.floor((monthIndex * 30.4) + 15);
+      
+      // Cálculo de temperatura media
+      let Tmean;
+      if (config.temperatureMode === 'min_max') {
+        Tmean = (parseFloat(convertedData.tempMin) + parseFloat(convertedData.tempMax)) / 2;
+      } else {
+        Tmean = parseFloat(convertedData.tempAvg);
+      }
+
+      let ETo;
+
+      if (config.etoCalculationMethod === 'temperature_only') {
+        // Método simplificado basado solo en temperatura (Hargreaves-Samani)
+        const Ra = calculateExtraterrestrialRadiation(latitudeRad, dayOfYear);
+        const tempRange = config.temperatureMode === 'min_max' 
+          ? Math.abs(parseFloat(convertedData.tempMax) - parseFloat(convertedData.tempMin))
+          : 10; // Valor estimado para temperatura media
+        
+        ETo = 0.0023 * (Tmean + 17.8) * Math.sqrt(tempRange) * Ra * 0.408;
+      } else {
+        // Método completo Penman-Monteith
+        const calculationResult = calculatePenmanMonteith(convertedData, monthIndex, latitude, altitude, config);
+        return calculationResult;
+      }
+
+      const finalEto = config.etoUnit === 'mm_per_period' ? ETo * 30 : ETo;
+
+      return {
+        radiation: null, // No se calcula para método simplificado
+        eto: parseFloat(finalEto.toFixed(1))
+      };
+    } catch (error) {
+      console.error("Error en cálculos:", error);
+      return {
+        radiation: null,
+        eto: null
+      };
+    }
+  }, [config, convertToStandardUnits]);
+
+  // Función auxiliar para calcular radiación extraterrestre
+  const calculateExtraterrestrialRadiation = (latitudeRad, dayOfYear) => {
+    const solarConstant = 0.0820;
+    const dr = 1 + 0.033 * Math.cos(2 * Math.PI * dayOfYear / 365);
+    const deltaValue = 0.409 * Math.sin(2 * Math.PI * dayOfYear / 365 - 1.39);
+    const ws = Math.acos(-Math.tan(latitudeRad) * Math.tan(deltaValue));
+    return 24 * 60 / Math.PI * solarConstant * dr * (ws * Math.sin(latitudeRad) * Math.sin(deltaValue) + Math.cos(latitudeRad) * Math.cos(deltaValue) * Math.sin(ws));
   };
 
-  // Cálculo de la radiación solar y ETo
-  useEffect(() => {
-    // Copia de los datos para modificarlos
-    const newData = [...climateData];
+  // Función completa Penman-Monteith
+  const calculatePenmanMonteith = (data, monthIndex, latitude, altitude, config) => {
+    const latitudeRad = parseFloat(latitude) * (Math.PI / 180);
+    const dayOfYear = Math.floor((monthIndex * 30.4) + 15);
     
-    // Para cada mes, calculamos la radiación y ETo si tenemos los datos necesarios
-    newData.forEach((data, index) => {
-      // Calculamos solo si tenemos todos los datos necesarios
-      if (shouldCalculateRadiationAndEto(data)) {
-        try {
-          // Calculamos la radiación si tenemos datos de insolación
-          // Simulación del cálculo de radiación basado en horas de sol
-          // En un caso real, usaríamos la fórmula completa de Penman-Monteith
-          const latitudeRad = parseFloat(stationInfo.latitude) * (Math.PI / 180);
-          const dayOfYear = Math.floor((index * 30.4) + 15); // Estimación del día medio del mes
-          
-          // Cálculo simplificado de radiación extraterrestre (Ra)
-          const solarConstant = 0.0820; // MJ/m²/min
-          const dr = 1 + 0.033 * Math.cos(2 * Math.PI * dayOfYear / 365);
-          const deltaValue = 0.409 * Math.sin(2 * Math.PI * dayOfYear / 365 - 1.39);
-          const ws = Math.acos(-Math.tan(latitudeRad) * Math.tan(deltaValue));
-          const Ra = 24 * 60 / Math.PI * solarConstant * dr * (ws * Math.sin(latitudeRad) * Math.sin(deltaValue) + Math.cos(latitudeRad) * Math.cos(deltaValue) * Math.sin(ws));
-          
-          // N = duración máxima posible de la insolación
-          const N = 24 * ws / Math.PI;
-          
-          // Rs = radiación solar o de onda corta (MJ/m²/día)
-          const Rs = (0.25 + 0.5 * parseFloat(data.sunshine) / N) * Ra;
-          
-          newData[index].radiation = parseFloat(Rs.toFixed(1));
-          
-          // Calculamos la ETo si tenemos todos los datos necesarios
-          // Cálculo simplificado de ETo usando la ecuación de Penman-Monteith
-          const Tmean = (parseFloat(data.tempMin) + parseFloat(data.tempMax)) / 2;
-          
-          // Presión de saturación de vapor a temperaturas máx. y mín.
-          const es_Tmax = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMax) / (parseFloat(data.tempMax) + 237.3));
-          const es_Tmin = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMin) / (parseFloat(data.tempMin) + 237.3));
-          
-          // Presión media de saturación de vapor
-          const es = (es_Tmax + es_Tmin) / 2;
-          
-          // Presión real de vapor (kPa)
-          const ea = es * parseFloat(data.humidity) / 100;
-          
-          // Pendiente de la curva de presión de vapor (kPa/°C)
-          const slopeValue = 4098 * (0.6108 * Math.exp(17.27 * Tmean / (Tmean + 237.3))) / Math.pow((Tmean + 237.3), 2);
-          
-          // Constante psicrométrica (kPa/°C)
-          const altitude = parseFloat(stationInfo.altitude) || 0;
-          const P = 101.3 * Math.pow((293 - 0.0065 * altitude) / 293, 5.26);
-          const gamma = 0.000665 * P;
-          
-          // Radiación neta (MJ/m²/día) - simplificada
-          const Rns = (1 - 0.23) * Rs; // Albedo = 0.23 para pasto de referencia
-          const Rnl = 4.903e-9 * ((Math.pow(parseFloat(data.tempMax) + 273.16, 4) + Math.pow(parseFloat(data.tempMin) + 273.16, 4)) / 2) * (0.34 - 0.14 * Math.sqrt(ea)) * (1.35 * Rs / Ra - 0.35);
-          const Rn = Rns - Rnl;
-          
-          // Flujo de calor del suelo (MJ/m²/día) - aproximado a 0 para periodos diarios
-          const G = 0;
-          
-          // ETo (mm/día)
-          const term1 = 0.408 * slopeValue * (Rn - G);
-          const term2 = gamma * (900 / (Tmean + 273)) * parseFloat(data.wind) * (es - ea);
-          const term3 = slopeValue + gamma * (1 + 0.34 * parseFloat(data.wind));
-          
-          const ETo = (term1 + term2) / term3;
-          
-          newData[index].eto = parseFloat(ETo.toFixed(1));
-        } catch (error) {
-          console.error("Error en cálculos:", error);
-          newData[index].radiation = null;
-          newData[index].eto = null;
-        }
-      } else {
-        // Si no tenemos datos suficientes, no calculamos nada
-        newData[index].radiation = null;
-        newData[index].eto = null;
-      }
-    });
+    // Radiación extraterrestre
+    const Ra = calculateExtraterrestrialRadiation(latitudeRad, dayOfYear);
     
-    setClimateData(newData);
-  }, [climateData, stationInfo]);
+    // Duración máxima posible de la insolación
+    const deltaValue = 0.409 * Math.sin(2 * Math.PI * dayOfYear / 365 - 1.39);
+    const ws = Math.acos(-Math.tan(latitudeRad) * Math.tan(deltaValue));
+    const N = 24 * ws / Math.PI;
+    
+    // Radiación solar
+    const Rs = (0.25 + 0.5 * parseFloat(data.sunshine) / N) * Ra;
+    
+    // Temperatura media
+    let Tmean;
+    if (config.temperatureMode === 'min_max') {
+      Tmean = (parseFloat(data.tempMin) + parseFloat(data.tempMax)) / 2;
+    } else {
+      Tmean = parseFloat(data.tempAvg);
+    }
 
-  // Calcular promedios para la fila final
-  const calculateAverages = () => {
-    const validMonths = climateData.filter(data => 
-      data.tempMin !== '' || data.tempMax !== '' || data.humidity !== '' || 
-      data.wind !== '' || data.sunshine !== ''
-    );
+    // Presión de saturación de vapor
+    let es, ea;
+    if (config.temperatureMode === 'min_max') {
+      const es_Tmax = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMax) / (parseFloat(data.tempMax) + 237.3));
+      const es_Tmin = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMin) / (parseFloat(data.tempMin) + 237.3));
+      es = (es_Tmax + es_Tmin) / 2;
+    } else {
+      es = 0.6108 * Math.exp(17.27 * Tmean / (Tmean + 237.3));
+    }
+
+    // Presión real de vapor
+    if (config.humidityUnit === 'relative_percent') {
+      ea = es * parseFloat(data.humidity) / 100;
+    } else {
+      ea = parseFloat(data.humidity); // Ya está en kPa
+    }
     
-    if (validMonths.length === 0) return { tempMin: 0, tempMax: 0, humidity: 0, wind: 0, sunshine: 0, radiation: 0, eto: 0 };
+    // Pendiente de la curva de presión de vapor
+    const slopeValue = 4098 * (0.6108 * Math.exp(17.27 * Tmean / (Tmean + 237.3))) / Math.pow((Tmean + 237.3), 2);
+    
+    // Constante psicrométrica
+    const altitudeValue = parseFloat(altitude) || 0;
+    const P = 101.3 * Math.pow((293 - 0.0065 * altitudeValue) / 293, 5.26);
+    const gamma = 0.000665 * P;
+    
+    // Radiación neta (simplificada)
+    const Rns = (1 - 0.23) * Rs;
+    const Rnl = 4.903e-9 * ((Math.pow(Tmean + 273.16, 4))) * (0.34 - 0.14 * Math.sqrt(ea)) * (1.35 * Rs / Ra - 0.35);
+    const Rn = Rns - Rnl;
+    
+    // ETo
+    const term1 = 0.408 * slopeValue * Rn;
+    const term2 = gamma * (900 / (Tmean + 273)) * parseFloat(data.wind) * (es - ea);
+    const term3 = slopeValue + gamma * (1 + 0.34 * parseFloat(data.wind));
+    
+    const ETo = (term1 + term2) / term3;
+    const finalEto = config.etoUnit === 'mm_per_period' ? ETo * 30 : ETo;
     
     return {
-      tempMin: parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.tempMin) || 0), 0) / validMonths.length).toFixed(1)),
-      tempMax: parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.tempMax) || 0), 0) / validMonths.length).toFixed(1)),
-      humidity: parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.humidity) || 0), 0) / validMonths.length).toFixed(0)),
-      wind: parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.wind) || 0), 0) / validMonths.length).toFixed(1)),
-      sunshine: parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.sunshine) || 0), 0) / validMonths.length).toFixed(1)),
-      radiation: parseFloat((validMonths.reduce((sum, data) => sum + (data.radiation || 0), 0) / validMonths.length).toFixed(1)),
-      eto: parseFloat((validMonths.reduce((sum, data) => sum + (data.eto || 0), 0) / validMonths.length).toFixed(1))
+      radiation: parseFloat(Rs.toFixed(1)),
+      eto: parseFloat(finalEto.toFixed(1))
     };
   };
 
-  const averages = calculateAverages();
+  // Usar useMemo para calcular los datos climáticos con radiación y ETo
+  const climateData = useMemo(() => {
+    return inputClimateData.map((data, index) => {
+      if (shouldCalculateRadiationAndEto(data)) {
+        const calculations = calculateRadiationAndEto(data, index, stationInfo.latitude, stationInfo.altitude);
+        return {
+          ...data,
+          radiation: calculations.radiation,
+          eto: calculations.eto
+        };
+      } else {
+        return {
+          ...data,
+          radiation: null,
+          eto: null
+        };
+      }
+    });
+  }, [inputClimateData, stationInfo.latitude, stationInfo.altitude, shouldCalculateRadiationAndEto, calculateRadiationAndEto]);
 
-  // Cargar datos de ejemplo
-  const loadExampleData = () => {
-    const exampleData = [
-      { month: 'Enero', tempMin: '12.8', tempMax: '27.0', humidity: '70', wind: '2.4', sunshine: '6.0' },
-      { month: 'Febrero', tempMin: '13.5', tempMax: '25.0', humidity: '35', wind: '2.5', sunshine: '7.5' },
-      { month: 'Marzo', tempMin: '15.1', tempMax: '22.0', humidity: '45', wind: '2.6', sunshine: '6.5' },
-      { month: 'Abril', tempMin: '15.9', tempMax: '19.0', humidity: '85', wind: '2.3', sunshine: '5.5' },
-      { month: 'Mayo', tempMin: '18.2', tempMax: '25.0', humidity: '95', wind: '2.4', sunshine: '6.0' },
-      { month: 'Junio', tempMin: '21.3', tempMax: '22.0', humidity: '85', wind: '2.5', sunshine: '7.0' },
-      { month: 'Julio', tempMin: '23.9', tempMax: '25.0', humidity: '65', wind: '2.8', sunshine: '7.2' },
-      { month: 'Agosto', tempMin: '23.8', tempMax: '25.0', humidity: '72', wind: '2.6', sunshine: '7.3' },
-      { month: 'Septiembre', tempMin: '23.6', tempMax: '25.0', humidity: '73', wind: '2.5', sunshine: '6.8' },
-      { month: 'Octubre', tempMin: '20.9', tempMax: '25.0', humidity: '69', wind: '2.3', sunshine: '5.6' },
-      { month: 'Noviembre', tempMin: '16.5', tempMax: '18.0', humidity: '65', wind: '2.2', sunshine: '5.9' },
-      { month: 'Diciembre', tempMin: '13.4', tempMax: '19.0', humidity: '85', wind: '2.0', sunshine: '6.8' }
+  // Calcular promedios
+  const calculateAverages = useCallback(() => {
+    const validMonths = climateData.filter(data => 
+      (config.temperatureMode === 'min_max' ? (data.tempMin !== '' || data.tempMax !== '') : data.tempAvg !== '') ||
+      data.humidity !== '' || data.wind !== '' || data.sunshine !== ''
+    );
+    
+    if (validMonths.length === 0) return {};
+    
+    const averages = {};
+    
+    if (config.temperatureMode === 'min_max') {
+      averages.tempMin = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.tempMin) || 0), 0) / validMonths.length).toFixed(1));
+      averages.tempMax = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.tempMax) || 0), 0) / validMonths.length).toFixed(1));
+    } else {
+      averages.tempAvg = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.tempAvg) || 0), 0) / validMonths.length).toFixed(1));
+    }
+
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      averages.humidity = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.humidity) || 0), 0) / validMonths.length).toFixed(1));
+      averages.wind = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.wind) || 0), 0) / validMonths.length).toFixed(1));
+      averages.sunshine = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.sunshine) || 0), 0) / validMonths.length).toFixed(1));
+    }
+
+    averages.radiation = parseFloat((validMonths.reduce((sum, data) => sum + (data.radiation || 0), 0) / validMonths.length).toFixed(1));
+    averages.eto = parseFloat((validMonths.reduce((sum, data) => sum + (data.eto || 0), 0) / validMonths.length).toFixed(1));
+
+    return averages;
+  }, [climateData, config]);
+
+  const averages = useMemo(() => calculateAverages(), [calculateAverages]);
+
+  // Cargar datos de ejemplo adaptados a la configuración
+  const loadExampleData = useCallback(() => {
+    const baseExampleData = [
+      { month: 'Enero', tempMin: '12.8', tempMax: '27.0', tempAvg: '19.9', humidity: '70', wind: '2.4', sunshine: '6.0' },
+      { month: 'Febrero', tempMin: '13.5', tempMax: '25.0', tempAvg: '19.3', humidity: '35', wind: '2.5', sunshine: '7.5' },
+      { month: 'Marzo', tempMin: '15.1', tempMax: '22.0', tempAvg: '18.6', humidity: '45', wind: '2.6', sunshine: '6.5' },
+      { month: 'Abril', tempMin: '15.9', tempMax: '19.0', tempAvg: '17.5', humidity: '85', wind: '2.3', sunshine: '5.5' },
+      { month: 'Mayo', tempMin: '18.2', tempMax: '25.0', tempAvg: '21.6', humidity: '95', wind: '2.4', sunshine: '6.0' },
+      { month: 'Junio', tempMin: '21.3', tempMax: '22.0', tempAvg: '21.7', humidity: '85', wind: '2.5', sunshine: '7.0' },
+      { month: 'Julio', tempMin: '23.9', tempMax: '25.0', tempAvg: '24.5', humidity: '65', wind: '2.8', sunshine: '7.2' },
+      { month: 'Agosto', tempMin: '23.8', tempMax: '25.0', tempAvg: '24.4', humidity: '72', wind: '2.6', sunshine: '7.3' },
+      { month: 'Septiembre', tempMin: '23.6', tempMax: '25.0', tempAvg: '24.3', humidity: '73', wind: '2.5', sunshine: '6.8' },
+      { month: 'Octubre', tempMin: '20.9', tempMax: '25.0', tempAvg: '23.0', humidity: '69', wind: '2.3', sunshine: '5.6' },
+      { month: 'Noviembre', tempMin: '16.5', tempMax: '18.0', tempAvg: '17.3', humidity: '65', wind: '2.2', sunshine: '5.9' },
+      { month: 'Diciembre', tempMin: '13.4', tempMax: '19.0', tempAvg: '16.2', humidity: '85', wind: '2.0', sunshine: '6.8' }
     ];
     
-    setClimateData(months.map((month, i) => ({
-      ...climateData[i],
-      ...exampleData[i],
-      radiation: null,
-      eto: null
-    })));
-    
-    setStationInfo({
-      ...stationInfo,
-      altitude: '100'
+    // Adaptar datos según configuración
+    const adaptedData = baseExampleData.map((item, i) => {
+      const newItem = {
+        ...inputClimateData[i],
+        month: item.month
+      };
+
+      // Temperatura según modo
+      if (config.temperatureMode === 'min_max') {
+        newItem.tempMin = item.tempMin;
+        newItem.tempMax = item.tempMax;
+      } else {
+        newItem.tempAvg = item.tempAvg;
+      }
+
+      // Datos adicionales para método completo
+      if (config.etoCalculationMethod === 'full_climate_data') {
+        // Humedad según unidad
+        if (config.humidityUnit === 'relative_percent') {
+          newItem.humidity = item.humidity;
+        } else {
+          // Convertir HR% a presión de vapor (estimación)
+          const temp = parseFloat(item.tempAvg);
+          const es = 0.6108 * Math.exp(17.27 * temp / (temp + 237.3));
+          newItem.humidity = (es * parseFloat(item.humidity) / 100).toFixed(2);
+        }
+
+        // Viento según unidad
+        if (config.windSpeedUnit === 'meters_per_second') {
+          newItem.wind = item.wind;
+        } else {
+          // Convertir m/s a km/día
+          newItem.wind = (parseFloat(item.wind) * 86.4).toFixed(1);
+        }
+
+        // Insolación según unidad
+        if (config.sunshineUnit === 'hours') {
+          newItem.sunshine = item.sunshine;
+        } else if (config.sunshineUnit === 'percentage_day_duration') {
+          // Convertir horas a porcentaje (asumiendo 12 horas de día)
+          newItem.sunshine = ((parseFloat(item.sunshine) / 12) * 100).toFixed(1);
+        } else {
+          // Convertir horas a fracción
+          newItem.sunshine = (parseFloat(item.sunshine) / 12).toFixed(2);
+        }
+      }
+
+      return newItem;
     });
-  };
+    
+    setInputClimateData(adaptedData);
+    setStationInfo(prev => ({ ...prev, altitude: '100' }));
+  }, [inputClimateData, config]);
 
   // Limpiar todos los datos
-  const clearAllData = () => {
-    setClimateData(initialClimateData);
+  const clearAllData = useCallback(() => {
+    setInputClimateData(getInitialClimateData());
     setStationInfo({
       country: '',
       station: '',
@@ -285,6 +564,177 @@ export default function Eto() {
       longitude: '',
       longDirection: 'W'
     });
+  }, [getInitialClimateData]);
+
+  // Renderizar campos de temperatura
+  const renderTemperatureFields = (row, index) => {
+    if (config.temperatureMode === 'min_max') {
+      return (
+        <>
+          <TableCell align="center">
+            <TextField
+              size="small"
+              variant="standard"
+              value={row.tempMin || ''}
+              onChange={(e) => updateMonthData(index, 'tempMin', e.target.value)}
+              inputProps={{ 
+                style: { textAlign: 'center' },
+                type: 'number'
+              }}
+            />
+          </TableCell>
+          <TableCell align="center">
+            <TextField
+              size="small"
+              variant="standard"
+              value={row.tempMax || ''}
+              onChange={(e) => updateMonthData(index, 'tempMax', e.target.value)}
+              inputProps={{ 
+                style: { textAlign: 'center' },
+                type: 'number'
+              }}
+            />
+          </TableCell>
+        </>
+      );
+    } else {
+      return (
+        <TableCell align="center">
+          <TextField
+            size="small"
+            variant="standard"
+            value={row.tempAvg || ''}
+            onChange={(e) => updateMonthData(index, 'tempAvg', e.target.value)}
+            inputProps={{ 
+              style: { textAlign: 'center' },
+              type: 'number'
+            }}
+          />
+        </TableCell>
+      );
+    }
+  };
+
+  // Renderizar headers de temperatura
+  const renderTemperatureHeaders = () => {
+    if (config.temperatureMode === 'min_max') {
+      return (
+        <>
+          <TableCell align="center">{getFieldLabels.tempMin}</TableCell>
+          <TableCell align="center">{getFieldLabels.tempMax}</TableCell>
+        </>
+      );
+    } else {
+      return (
+        <TableCell align="center">{getFieldLabels.tempAvg}</TableCell>
+      );
+    }
+  };
+
+  // Renderizar campos adicionales para método completo
+  const renderAdditionalFields = (row, index) => {
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      return (
+        <>
+          <TableCell align="center">
+            <TextField
+              size="small"
+              variant="standard"
+              value={row.humidity || ''}
+              onChange={(e) => updateMonthData(index, 'humidity', e.target.value)}
+              inputProps={{ 
+                style: { textAlign: 'center' },
+                type: 'number',
+                step: config.humidityUnit === 'vapor_pressure_kpa' ? '0.1' : '1'
+              }}
+            />
+          </TableCell>
+          <TableCell align="center">
+            <TextField
+              size="small"
+              variant="standard"
+              value={row.wind || ''}
+              onChange={(e) => updateMonthData(index, 'wind', e.target.value)}
+              inputProps={{ 
+                style: { textAlign: 'center' },
+                type: 'number',
+                step: '0.1'
+              }}
+            />
+          </TableCell>
+          <TableCell align="center">
+            <TextField
+              size="small"
+              variant="standard"
+              value={row.sunshine || ''}
+              onChange={(e) => updateMonthData(index, 'sunshine', e.target.value)}
+              inputProps={{ 
+                style: { textAlign: 'center' },
+                type: 'number',
+                step: config.sunshineUnit === 'fraction_day_duration' ? '0.01' : '0.1'
+              }}
+            />
+          </TableCell>
+        </>
+      );
+    }
+    return null;
+  };
+
+  // Renderizar headers adicionales
+  const renderAdditionalHeaders = () => {
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      return (
+        <>
+          <TableCell align="center">{getFieldLabels.humidity}</TableCell>
+          <TableCell align="center">{getFieldLabels.wind}</TableCell>
+          <TableCell align="center">{getFieldLabels.sunshine}</TableCell>
+        </>
+      );
+    }
+    return null;
+  };
+
+  // Renderizar promedios de temperatura
+  const renderTemperatureAverages = () => {
+    if (config.temperatureMode === 'min_max') {
+      return (
+        <>
+          <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+            {!isNaN(averages.tempMin) ? averages.tempMin : ''}
+          </TableCell>
+          <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+            {!isNaN(averages.tempMax) ? averages.tempMax : ''}
+          </TableCell>
+        </>
+      );
+    } else {
+      return (
+        <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+          {!isNaN(averages.tempAvg) ? averages.tempAvg : ''}
+        </TableCell>
+      );
+    }
+  };
+
+  // Renderizar promedios adicionales
+  const renderAdditionalAverages = () => {
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      return (
+        <>
+          <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+            {!isNaN(averages.humidity) ? averages.humidity : ''}
+          </TableCell>
+          <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+            {!isNaN(averages.wind) ? averages.wind : ''}
+          </TableCell>
+          <TableCell align="center" sx={{ fontWeight: 'bold' }}>
+            {!isNaN(averages.sunshine) ? averages.sunshine : ''}
+          </TableCell>
+        </>
+      );
+    }
+    return null;
   };
 
   return (
@@ -340,7 +790,7 @@ export default function Eto() {
                   <FormControl sx={{ minWidth: 60, ml: 1 }}>
                     <Select
                       value={stationInfo.latDirection}
-                      onChange={(e) => setStationInfo({ ...stationInfo, latDirection: e.target.value })}
+                      onChange={(e) => setStationInfo(prev => ({ ...prev, latDirection: e.target.value }))}
                     >
                       <MenuItem value="N">N</MenuItem>
                       <MenuItem value="S">S</MenuItem>
@@ -361,7 +811,7 @@ export default function Eto() {
                   <FormControl sx={{ minWidth: 60, ml: 1 }}>
                     <Select
                       value={stationInfo.longDirection}
-                      onChange={(e) => setStationInfo({ ...stationInfo, longDirection: e.target.value })}
+                      onChange={(e) => setStationInfo(prev => ({ ...prev, longDirection: e.target.value }))}
                     >
                       <MenuItem value="E">E</MenuItem>
                       <MenuItem value="W">W</MenuItem>
@@ -380,13 +830,12 @@ export default function Eto() {
               <TableHead>
                 <TableRow>
                   <TableCell>Mes</TableCell>
-                  <TableCell align="center">Temp Min<br/>°C</TableCell>
-                  <TableCell align="center">Temp Max<br/>°C</TableCell>
-                  <TableCell align="center">Humedad<br/>%</TableCell>
-                  <TableCell align="center">Viento<br/>m/s</TableCell>
-                  <TableCell align="center">Insolación<br/>horas</TableCell>
-                  <TableCell align="center">Rad<br/>MJ/m²/día</TableCell>
-                  <TableCell align="center">ETo<br/>mm/día</TableCell>
+                  {renderTemperatureHeaders()}
+                  {renderAdditionalHeaders()}
+                  {config.etoCalculationMethod === 'full_climate_data' && (
+                    <TableCell align="center">{getFieldLabels.radiation}</TableCell>
+                  )}
+                  <TableCell align="center">{getFieldLabels.eto}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -395,69 +844,13 @@ export default function Eto() {
                     <TableCell component="th" scope="row">
                       {row.month}
                     </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        value={row.tempMin}
-                        onChange={(e) => updateMonthData(index, 'tempMin', e.target.value)}
-                        inputProps={{ 
-                          style: { textAlign: 'center' },
-                          type: 'number'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        value={row.tempMax}
-                        onChange={(e) => updateMonthData(index, 'tempMax', e.target.value)}
-                        inputProps={{ 
-                          style: { textAlign: 'center' },
-                          type: 'number'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        value={row.humidity}
-                        onChange={(e) => updateMonthData(index, 'humidity', e.target.value)}
-                        inputProps={{ 
-                          style: { textAlign: 'center' },
-                          type: 'number'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        value={row.wind}
-                        onChange={(e) => updateMonthData(index, 'wind', e.target.value)}
-                        inputProps={{ 
-                          style: { textAlign: 'center' },
-                          type: 'number'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        value={row.sunshine}
-                        onChange={(e) => updateMonthData(index, 'sunshine', e.target.value)}
-                        inputProps={{ 
-                          style: { textAlign: 'center' },
-                          type: 'number'
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
-                      {row.radiation !== null ? row.radiation : ''}
-                    </TableCell>
+                    {renderTemperatureFields(row, index)}
+                    {renderAdditionalFields(row, index)}
+                    {config.etoCalculationMethod === 'full_climate_data' && (
+                      <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
+                        {row.radiation !== null ? row.radiation : ''}
+                      </TableCell>
+                    )}
                     <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
                       {row.eto !== null ? row.eto : ''}
                     </TableCell>
@@ -467,14 +860,13 @@ export default function Eto() {
                   <TableCell component="th" scope="row" sx={{ fontWeight: 'bold' }}>
                     Promedio
                   </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{!isNaN(averages.tempMin) ? averages.tempMin : ''}</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{!isNaN(averages.tempMax) ? averages.tempMax : ''}</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{!isNaN(averages.humidity) ? averages.humidity : ''}</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{!isNaN(averages.wind) ? averages.wind : ''}</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold' }}>{!isNaN(averages.sunshine) ? averages.sunshine : ''}</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
-                    {!isNaN(averages.radiation) ? averages.radiation : ''}
-                  </TableCell>
+                  {renderTemperatureAverages()}
+                  {renderAdditionalAverages()}
+                  {config.etoCalculationMethod === 'full_climate_data' && (
+                    <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
+                      {!isNaN(averages.radiation) ? averages.radiation : ''}
+                    </TableCell>
+                  )}
                   <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
                     {!isNaN(averages.eto) ? averages.eto : ''}
                   </TableCell>
@@ -500,12 +892,29 @@ export default function Eto() {
           </Grid>
         </Grid>
 
-        {/* Instrucciones */}
+        {/* Información dinámica basada en configuración */}
         <Grid item xs={12} sx={{ mt: 2 }}>
           <Typography variant="body2">
-            Este módulo calcula la evapotranspiración de referencia (ETo) utilizando el método Penman-Monteith de la FAO.
-            Ingrese los datos climáticos mensuales respetando los rangos válidos y el sistema calculará automáticamente la radiación solar y ETo.
-            Las celdas amarillas muestran los valores calculados.
+            <strong>Método de cálculo:</strong> {config.etoCalculationMethod === 'full_climate_data' 
+              ? 'ETo Penman-Monteith completo con datos climáticos' 
+              : 'ETo simplificado basado en temperatura (Hargreaves-Samani)'}
+            <br />
+            <strong>Modo de temperatura:</strong> {config.temperatureMode === 'min_max' 
+              ? 'Temperaturas mínima y máxima' 
+              : 'Temperatura media'}
+            <br />
+            <strong>Unidades:</strong> 
+            {config.etoCalculationMethod === 'full_climate_data' && (
+              <>
+                {' '}Humedad: {config.humidityUnit === 'relative_percent' ? 'Porcentaje (%)' : 'Presión de vapor (kPa)'}, 
+                Viento: {config.windSpeedUnit === 'meters_per_second' ? 'm/s' : 'km/día'}, 
+                Insolación: {config.sunshineUnit === 'hours' ? 'horas' : 
+                  config.sunshineUnit === 'percentage_day_duration' ? 'porcentaje' : 'fracción'},
+              </>
+            )}
+            {' '}ETo: {config.etoUnit === 'mm_per_day' ? 'mm/día' : 'mm/período'}
+            <br />
+            Las celdas amarillas muestran los valores calculados automáticamente.
           </Typography>
         </Grid>
 
