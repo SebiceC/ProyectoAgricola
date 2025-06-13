@@ -1,36 +1,32 @@
-// assets
-import { LoginOutlined, ProfileOutlined } from '@ant-design/icons';
+import { LoginOutlined, ProfileOutlined, UserOutlined, KeyOutlined } from '@ant-design/icons';
 
-// icons
 const icons = {
   LoginOutlined,
-  ProfileOutlined
+  ProfileOutlined,
+  UserOutlined,
+  KeyOutlined
 };
 
-// ==============================|| MENU ITEMS - EXTRA PAGES ||============================== //
-
-const pages = {
-  id: 'authentication',
-  title: 'Authentication',
+const getAdminPages = () => ({
+  id: 'admin',
+  title: 'Admin',
   type: 'group',
   children: [
     {
-      id: 'login1',
-      title: 'Login',
+      id: 'users-management',
+      title: 'User Management',
       type: 'item',
-      url: '/login',
-      icon: icons.LoginOutlined,
-      target: true
+      url: '/admin/users',
+      icon: icons.UserOutlined
     },
     {
-      id: 'register1',
-      title: 'Register',
+      id: 'roles-management',
+      title: 'Role Management',
       type: 'item',
-      url: '/register',
-      icon: icons.ProfileOutlined,
-      target: true
+      url: '/admin/roles',
+      icon: icons.KeyOutlined
     }
   ]
-};
+});
 
-export default pages;
+export { getAdminPages };

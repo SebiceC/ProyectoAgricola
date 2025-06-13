@@ -4,12 +4,14 @@ import Box from '@mui/material/Box';
 
 // project import
 import NavGroup from './NavGroup';
-import menuItem from 'menu-items';
-
-// ==============================|| DRAWER CONTENT - NAVIGATION ||============================== //
+import { useUser } from '../../../../../contexts/UserContext';
+import getMenuItems from 'menu-items';
 
 export default function Navigation() {
-  const navGroups = menuItem.items.map((item) => {
+  const { user } = useUser();
+  const menu = getMenuItems(user);
+
+  const navGroups = menu.items.map((item) => {
     switch (item.type) {
       case 'group':
         return <NavGroup key={item.id} item={item} />;
