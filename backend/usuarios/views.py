@@ -15,7 +15,7 @@ import random
 import string
 from django.conf import settings
 import requests
-
+from django.contrib.auth.models import Group
 
 User = get_user_model()
 
@@ -150,6 +150,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     # Generar tokens JWT
                     from rest_framework_simplejwt.tokens import RefreshToken
                     refresh = RefreshToken.for_user(user)
+                    groups = list(user.groups.values_list('name', flat=True))
                     
                     # Eliminar OTP usado
                     otp_obj.delete()
@@ -164,7 +165,8 @@ class UserViewSet(viewsets.ModelViewSet):
                                 'id': user.id,
                                 'email': user.email,
                                 'first_name': user.first_name,
-                                'last_name': user.last_name
+                                'last_name': user.last_name,
+                                'role': groups
                             }
                         }
                     }, status=status.HTTP_200_OK)
