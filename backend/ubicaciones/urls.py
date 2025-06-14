@@ -1,5 +1,6 @@
 from rest_framework import routers
 from django.urls import path
+
 from .views import UbicacionViewSet, SueloViewSet, PrecipitacionViewSet, EtoViewSet, EvapotranspirationViewSet
 router = routers.DefaultRouter()
 
@@ -9,6 +10,7 @@ router.register("api/precipitacion", PrecipitacionViewSet, basename="precipitaci
 router.register("api/eto", EtoViewSet, basename="eto")
 router.register("api/evapotranspiracion", EvapotranspirationViewSet, basename="evapotranspiracion")
 
+urlpatterns = router.urls
 
 
 #from django.urls import path
