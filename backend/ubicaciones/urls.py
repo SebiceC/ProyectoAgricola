@@ -10,9 +10,6 @@ router.register("api/eto", EtoViewSet, basename="eto")
 router.register("api/evapotranspiracion", EvapotranspirationViewSet, basename="evapotranspiracion")
 
 
-urlpatterns = [
-    path('api/ubicacion', UbicacionViewSet.as_view({'get': 'list', 'post': 'create'}), name='ubicacion-list'),
-]
 
 #from django.urls import path
 #from .views import UserViewSet
