@@ -235,6 +235,8 @@ class UserViewSet(viewsets.ModelViewSet):
         Verifica el estado de la sesión actual.
         """
         if request.user.is_authenticated:
+            groups = request.user.groups.all()
+            grupo = groups[0] if groups else None
             return Response({
                 'status': 'success',
                 'message': 'Sesión activa',
@@ -243,7 +245,8 @@ class UserViewSet(viewsets.ModelViewSet):
                         'id': request.user.id,
                         'email': request.user.email,
                         'first_name': request.user.first_name,
-                        'last_name': request.user.last_name
+                        'last_name': request.user.last_name,
+                        'role': grupo.name if groups else None  
                     }
                 }
             }, status=status.HTTP_200_OK)
