@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import axios from 'axios';
 
 // material-ui
 import Typography from '@mui/material/Typography';
@@ -16,7 +17,9 @@ import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 
 // project imports
 import MainCard from 'components/MainCard';
@@ -55,6 +58,13 @@ export default function Eto() {
     }
   }, []);
 
+  // Estados adicionales para el control de flujo
+  const [calculationMethod, setCalculationMethod] = useState(''); // 'formula' o 'api'
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [showTable, setShowTable] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   // Valores iniciales basados en configuración
   const getInitialClimateData = useCallback(() => {
     return months.map((month) => ({
@@ -80,11 +90,11 @@ export default function Eto() {
 
   const [stationInfo, setStationInfo] = useState({
     country: '',
-    station: '24570',
+    station: '',
     altitude: '',
-    latitude: '24.82',
+    latitude: '',
     latDirection: 'N',
-    longitude: '109.00',
+    longitude: '',
     longDirection: 'W'
   });
 
@@ -97,6 +107,17 @@ export default function Eto() {
   useEffect(() => {
     setInputClimateData(getInitialClimateData());
   }, [getInitialClimateData]);
+
+  // Verificar si los datos básicos están completos
+  const isBasicDataComplete = useMemo(() => {
+    return (
+      stationInfo.country !== '' &&
+      stationInfo.station !== '' &&
+      stationInfo.altitude !== '' &&
+      stationInfo.latitude !== '' &&
+      stationInfo.longitude !== ''
+    );
+  }, [stationInfo]);
 
   // Reglas de validación dinámicas basadas en configuración
   const getValidationRules = useMemo(() => {
@@ -206,8 +227,6 @@ export default function Eto() {
 
   // Función de validación genérica
   const validateValue = useCallback((value, rule, fieldName) => {
-    const validationRules = getValidationRules;
-    
     if (rule.max && typeof value === 'string' && !rule.min) {
       if (value.length > rule.max) {
         showAlert(rule.message);
@@ -222,7 +241,7 @@ export default function Eto() {
       }
     }
     return true;
-  }, [getValidationRules, showAlert]);
+  }, [showAlert]);
 
   // Actualizar datos de la estación con validación
   const updateStationInfo = useCallback((field, value) => {
@@ -252,8 +271,158 @@ export default function Eto() {
     });
   }, [validateValue, getValidationRules]);
 
-  // Verificar si debemos calcular la radiación y ETo
+  // Función para procesar datos de API y convertir a promedios mensuales
+  const processApiData = useCallback((apiResponse) => {
+    const weatherData = apiResponse.weather_data;
+    const etoData = apiResponse.evapotranspiration;
+    
+    // Agrupar datos por mes
+    const monthlyData = {};
+    
+    // Inicializar estructura para cada mes
+    for (let i = 0; i < 12; i++) {
+      monthlyData[i] = {
+        tempMin: [],
+        tempMax: [],
+        humidity: [],
+        wind: [],
+        radiation: [],
+        eto: [],
+        count: 0
+      };
+    }
+    
+    // Procesar cada fecha
+    Object.keys(etoData).forEach(dateKey => {
+      const date = new Date(dateKey.slice(0,4) + '-' + dateKey.slice(4,6) + '-' + dateKey.slice(6,8));
+      const month = date.getMonth();
+      
+      if (weatherData.T2M_MIN[dateKey]) {
+        monthlyData[month].tempMin.push(weatherData.T2M_MIN[dateKey]);
+      }
+      if (weatherData.T2M_MAX[dateKey]) {
+        monthlyData[month].tempMax.push(weatherData.T2M_MAX[dateKey]);
+      }
+      if (weatherData.RH2M[dateKey]) {
+        monthlyData[month].humidity.push(weatherData.RH2M[dateKey]);
+      }
+      if (weatherData.WS2M[dateKey]) {
+        monthlyData[month].wind.push(weatherData.WS2M[dateKey]);
+      }
+      if (weatherData.ALLSKY_SFC_SW_DWN[dateKey]) {
+        monthlyData[month].radiation.push(weatherData.ALLSKY_SFC_SW_DWN[dateKey]);
+      }
+      if (etoData[dateKey]) {
+        monthlyData[month].eto.push(etoData[dateKey]);
+      }
+      
+      monthlyData[month].count++;
+    });
+    
+    // Calcular promedios y actualizar datos climáticos
+    const newClimateData = months.map((monthName, index) => {
+      const monthData = monthlyData[index];
+      
+      if (monthData.count === 0) {
+        return {
+          month: monthName,
+          tempMin: '',
+          tempMax: '',
+          humidity: '',
+          wind: '',
+          sunshine: '',
+          radiation: null,
+          eto: null
+        };
+      }
+      
+      const calculateAverage = (arr) => {
+        if (arr.length === 0) return '';
+        return (arr.reduce((sum, val) => sum + val, 0) / arr.length).toFixed(1);
+      };
+      
+      return {
+        month: monthName,
+        tempMin: calculateAverage(monthData.tempMin),
+        tempMax: calculateAverage(monthData.tempMax),
+        humidity: calculateAverage(monthData.humidity),
+        wind: calculateAverage(monthData.wind),
+        sunshine: '', // No disponible en API
+        radiation: parseFloat(calculateAverage(monthData.radiation)) || null,
+        eto: parseFloat(calculateAverage(monthData.eto)) || null
+      };
+    });
+    
+    setInputClimateData(newClimateData);
+  }, []);
+
+  // Función para llamar a la API
+  const fetchApiData = useCallback(async () => {
+    if (!startDate || !endDate) {
+      showAlert("Debe especificar fecha de inicio y fin", "Error");
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const lat = parseFloat(stationInfo.latitude) * (stationInfo.latDirection === 'S' ? -1 : 1);
+      const lon = parseFloat(stationInfo.longitude) * (stationInfo.longDirection === 'W' ? -1 : 1);
+      
+      const response = await axios.get(
+        `${import.meta.env.VITE_URL_BACKEND_API}ubicaciones/api/evapotranspiracion/get_evapotranspiration/`,
+        {
+          params: {
+            lat: lat,
+            lon: lon,
+            start: startDate.replace(/-/g, ''),
+            end: endDate.replace(/-/g, '')
+          },
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        processApiData(response.data);
+        setShowTable(true);
+        showAlert("Datos cargados exitosamente desde la API", "Éxito");
+      } else {
+        showAlert("Error en la respuesta de la API", "Error");
+      }
+    } catch (error) {
+      console.error('Error al llamar la API:', error);
+      showAlert("Error al conectar con la API: " + error.message, "Error de Conexión");
+    } finally {
+      setLoading(false);
+    }
+  }, [stationInfo, startDate, endDate, processApiData, showAlert]);
+
+  // Función para manejar el botón calcular
+  const handleCalculate = useCallback(() => {
+    if (!isBasicDataComplete) {
+      showAlert("Debe completar todos los datos básicos (País, Estación, Altitud, Latitud, Longitud)", "Datos Incompletos");
+      return;
+    }
+    
+    if (!calculationMethod) {
+      showAlert("Debe seleccionar un método de cálculo", "Método no seleccionado");
+      return;
+    }
+    
+    if (calculationMethod === 'api') {
+      fetchApiData();
+    } else {
+      // Mostrar tabla para llenado manual
+      setShowTable(true);
+    }
+  }, [isBasicDataComplete, calculationMethod, fetchApiData, showAlert]);
+
+  // Verificar si debemos calcular la radiación y ETo (solo para modo fórmula)
   const shouldCalculateRadiationAndEto = useCallback((data) => {
+    if (calculationMethod === 'api') return false; // Los datos de API ya vienen calculados
+    
     // Para método de temperatura solamente
     if (config.etoCalculationMethod === 'temperature_only') {
       if (config.temperatureMode === 'min_max') {
@@ -280,7 +449,7 @@ export default function Eto() {
         data.sunshine !== ''
       );
     }
-  }, [config]);
+  }, [config, calculationMethod]);
 
   // Convertir unidades según configuración
   const convertToStandardUnits = useCallback((data) => {
@@ -432,7 +601,10 @@ export default function Eto() {
   // Usar useMemo para calcular los datos climáticos con radiación y ETo
   const climateData = useMemo(() => {
     return inputClimateData.map((data, index) => {
-      if (shouldCalculateRadiationAndEto(data)) {
+      if (calculationMethod === 'api') {
+        // Para datos de API, usar los valores ya calculados
+        return data;
+      } else if (shouldCalculateRadiationAndEto(data)) {
         const calculations = calculateRadiationAndEto(data, index, stationInfo.latitude, stationInfo.altitude);
         return {
           ...data,
@@ -447,7 +619,7 @@ export default function Eto() {
         };
       }
     });
-  }, [inputClimateData, stationInfo.latitude, stationInfo.altitude, shouldCalculateRadiationAndEto, calculateRadiationAndEto]);
+  }, [inputClimateData, stationInfo.latitude, stationInfo.altitude, shouldCalculateRadiationAndEto, calculateRadiationAndEto, calculationMethod]);
 
   // Calcular promedios
   const calculateAverages = useCallback(() => {
@@ -564,6 +736,10 @@ export default function Eto() {
       longitude: '',
       longDirection: 'W'
     });
+    setCalculationMethod('');
+    setStartDate('');
+    setEndDate('');
+    setShowTable(false);
   }, [getInitialClimateData]);
 
   // Renderizar campos de temperatura
@@ -579,8 +755,10 @@ export default function Eto() {
               onChange={(e) => updateMonthData(index, 'tempMin', e.target.value)}
               inputProps={{ 
                 style: { textAlign: 'center' },
-                type: 'number'
+                type: 'number',
+                readOnly: calculationMethod === 'api'
               }}
+              disabled={calculationMethod === 'api'}
             />
           </TableCell>
           <TableCell align="center">
@@ -591,8 +769,10 @@ export default function Eto() {
               onChange={(e) => updateMonthData(index, 'tempMax', e.target.value)}
               inputProps={{ 
                 style: { textAlign: 'center' },
-                type: 'number'
+                type: 'number',
+                readOnly: calculationMethod === 'api'
               }}
+              disabled={calculationMethod === 'api'}
             />
           </TableCell>
         </>
@@ -607,8 +787,10 @@ export default function Eto() {
             onChange={(e) => updateMonthData(index, 'tempAvg', e.target.value)}
             inputProps={{ 
               style: { textAlign: 'center' },
-              type: 'number'
+              type: 'number',
+              readOnly: calculationMethod === 'api'
             }}
+            disabled={calculationMethod === 'api'}
           />
         </TableCell>
       );
@@ -645,8 +827,10 @@ export default function Eto() {
               inputProps={{ 
                 style: { textAlign: 'center' },
                 type: 'number',
-                step: config.humidityUnit === 'vapor_pressure_kpa' ? '0.1' : '1'
+                step: config.humidityUnit === 'vapor_pressure_kpa' ? '0.1' : '1',
+                readOnly: calculationMethod === 'api'
               }}
+              disabled={calculationMethod === 'api'}
             />
           </TableCell>
           <TableCell align="center">
@@ -658,8 +842,10 @@ export default function Eto() {
               inputProps={{ 
                 style: { textAlign: 'center' },
                 type: 'number',
-                step: '0.1'
+                step: '0.1',
+                readOnly: calculationMethod === 'api'
               }}
+              disabled={calculationMethod === 'api'}
             />
           </TableCell>
           <TableCell align="center">
@@ -671,8 +857,10 @@ export default function Eto() {
               inputProps={{ 
                 style: { textAlign: 'center' },
                 type: 'number',
-                step: config.sunshineUnit === 'fraction_day_duration' ? '0.01' : '0.1'
+                step: config.sunshineUnit === 'fraction_day_duration' ? '0.01' : '0.1',
+                readOnly: calculationMethod === 'api'
               }}
+              disabled={calculationMethod === 'api'}
             />
           </TableCell>
         </>
@@ -823,74 +1011,154 @@ export default function Eto() {
           </Paper>
         </Grid>
 
+        {/* Selector de método y fechas */}
+        {isBasicDataComplete && (
+          <Grid item xs={12}>
+            <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} sm={6} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Método de Cálculo</InputLabel>
+                    <Select
+                      value={calculationMethod}
+                      label="Método de Cálculo"
+                      onChange={(e) => setCalculationMethod(e.target.value)}
+                    >
+                      <MenuItem value="formula">Usar fórmula Penman-Monteith</MenuItem>
+                      <MenuItem value="api">Usar API</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                {calculationMethod === 'api' && (
+                  <>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        fullWidth
+                        label="Fecha de Inicio"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        helperText="Formato: AAAA-MM-DD"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        fullWidth
+                        label="Fecha de Fin"
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        helperText="Formato: AAAA-MM-DD"
+                      />
+                    </Grid>
+                  </>
+                )}
+                
+                <Grid item xs={12} sm={6} md={2}>
+                  <Button 
+                    variant="contained" 
+                    color="primary" 
+                    onClick={handleCalculate}
+                    disabled={loading}
+                    fullWidth
+                    startIcon={loading ? <CircularProgress size={20} /> : null}
+                  >
+                    {loading ? 'Cargando...' : 'Calcular'}
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Grid>
+        )}
+
         {/* Tabla de datos climáticos */}
-        <Grid item xs={12}>
-          <TableContainer component={Paper} elevation={3}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Mes</TableCell>
-                  {renderTemperatureHeaders()}
-                  {renderAdditionalHeaders()}
-                  {config.etoCalculationMethod === 'full_climate_data' && (
-                    <TableCell align="center">{getFieldLabels.radiation}</TableCell>
-                  )}
-                  <TableCell align="center">{getFieldLabels.eto}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {climateData.map((row, index) => (
-                  <TableRow key={row.month}>
-                    <TableCell component="th" scope="row">
-                      {row.month}
-                    </TableCell>
-                    {renderTemperatureFields(row, index)}
-                    {renderAdditionalFields(row, index)}
+        {showTable && (
+          <Grid item xs={12}>
+            <TableContainer component={Paper} elevation={3}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Mes</TableCell>
+                    {renderTemperatureHeaders()}
+                    {renderAdditionalHeaders()}
                     {config.etoCalculationMethod === 'full_climate_data' && (
+                      <TableCell align="center">{getFieldLabels.radiation}</TableCell>
+                    )}
+                    <TableCell align="center">{getFieldLabels.eto}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {climateData.map((row, index) => (
+                    <TableRow key={row.month}>
+                      <TableCell component="th" scope="row">
+                        {row.month}
+                      </TableCell>
+                      {renderTemperatureFields(row, index)}
+                      {renderAdditionalFields(row, index)}
+                      {config.etoCalculationMethod === 'full_climate_data' && (
+                        <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
+                          {row.radiation !== null ? row.radiation : ''}
+                        </TableCell>
+                      )}
                       <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
-                        {row.radiation !== null ? row.radiation : ''}
+                        {row.eto !== null ? row.eto : ''}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                    <TableCell component="th" scope="row" sx={{ fontWeight: 'bold' }}>
+                      Promedio
+                    </TableCell>
+                    {renderTemperatureAverages()}
+                    {renderAdditionalAverages()}
+                    {config.etoCalculationMethod === 'full_climate_data' && (
+                      <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
+                        {!isNaN(averages.radiation) ? averages.radiation : ''}
                       </TableCell>
                     )}
-                    <TableCell align="center" sx={{ backgroundColor: '#FFFFC0' }}>
-                      {row.eto !== null ? row.eto : ''}
+                    <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
+                      {!isNaN(averages.eto) ? averages.eto : ''}
                     </TableCell>
                   </TableRow>
-                ))}
-                <TableRow>
-                  <TableCell component="th" scope="row" sx={{ fontWeight: 'bold' }}>
-                    Promedio
-                  </TableCell>
-                  {renderTemperatureAverages()}
-                  {renderAdditionalAverages()}
-                  {config.etoCalculationMethod === 'full_climate_data' && (
-                    <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
-                      {!isNaN(averages.radiation) ? averages.radiation : ''}
-                    </TableCell>
-                  )}
-                  <TableCell align="center" sx={{ fontWeight: 'bold', backgroundColor: '#FFFFC0' }}>
-                    {!isNaN(averages.eto) ? averages.eto : ''}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Grid>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Grid>
+        )}
 
-        {/* Botones de acción */}
-        <Grid item xs={12} sx={{ mt: 2 }}>
-          <Grid container spacing={2}>
-            <Grid item>
-              <Button variant="contained" color="primary" onClick={loadExampleData}>
-                Cargar Ejemplo
-              </Button>
-            </Grid>
-            <Grid item>
-              <Button variant="outlined" color="secondary" onClick={clearAllData}>
-                Limpiar Datos
-              </Button>
+        {/* Botones de acción - solo mostrar si la tabla está visible y no es modo API */}
+        {showTable && calculationMethod === 'formula' && (
+          <Grid item xs={12} sx={{ mt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item>
+                <Button variant="contained" color="primary" onClick={loadExampleData}>
+                  Cargar Ejemplo
+                </Button>
+              </Grid>
+              <Grid item>
+                <Button variant="outlined" color="secondary" onClick={clearAllData}>
+                  Limpiar Datos
+                </Button>
+              </Grid>
             </Grid>
           </Grid>
-        </Grid>
+        )}
+
+        {/* Botón para limpiar todo cuando se usa API */}
+        {showTable && calculationMethod === 'api' && (
+          <Grid item xs={12} sx={{ mt: 2 }}>
+            <Button variant="outlined" color="secondary" onClick={clearAllData}>
+              Limpiar Datos
+            </Button>
+          </Grid>
+        )}
 
         {/* Información dinámica basada en configuración */}
         <Grid item xs={12} sx={{ mt: 2 }}>
@@ -914,7 +1182,14 @@ export default function Eto() {
             )}
             {' '}ETo: {config.etoUnit === 'mm_per_day' ? 'mm/día' : 'mm/período'}
             <br />
+            {calculationMethod === 'api' && 'Los datos han sido obtenidos de la API y promediados por mes. '}
             Las celdas amarillas muestran los valores calculados automáticamente.
+            {calculationMethod === 'api' && (
+              <>
+                <br />
+                <strong>Periodo consultado:</strong> {startDate} a {endDate}
+              </>
+            )}
           </Typography>
         </Grid>
 
