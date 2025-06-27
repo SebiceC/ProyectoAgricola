@@ -1,35 +1,12 @@
 import math
 import requests
-from .models import Ubicacion, Suelo, Precipitacion, Eto
+from .models import Eto
 from rest_framework import viewsets, permissions, status
-from .serializers import UbicacionSerializer, SueloSerializer, PrecipitacionSerializer, EtoSerializer
+from .serializers import EtoSerializer
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.decorators import action
 
-class UbicacionViewSet(viewsets.ModelViewSet):
-    """
-    Esta clase maneja todas las operaciones CRUD para el modelo ubicacions.
-    """
-    queryset = Ubicacion.objects.all()
-    permission_classes = [permissions.AllowAny]
-    serializer_class = UbicacionSerializer
-
-class SueloViewSet(viewsets.ModelViewSet):
-    """
-    Esta clase maneja todas las operaciones CRUD para el modelo Suelo.
-    """
-    queryset = Suelo.objects.all()
-    permission_classes = [permissions.AllowAny]
-    serializer_class = SueloSerializer
-
-class PrecipitacionViewSet(viewsets.ModelViewSet):
-    """
-    Esta clase maneja todas las operaciones CRUD para el modelo Precipitacion.
-    """
-    queryset = Precipitacion.objects.all()
-    permission_classes = [permissions.AllowAny]
-    serializer_class = PrecipitacionSerializer
 
 class EtoViewSet(viewsets.ModelViewSet):
     """
@@ -39,12 +16,24 @@ class EtoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.AllowAny]
     serializer_class = EtoSerializer
 
+    @action(detail=False, methods=['post'])
+    def calculate_eto_manual(self, request):
+        """
+        Ruta personalizada para calcular y guardar ETo usando el metodo seleccionado.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        instance = serializer.save()
+
+        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+
 # views.py
 class EvapotranspirationViewSet(viewsets.ViewSet):
     """
     ViewSet para manejar la obtención de datos de evapotranspiración.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.AllowAny]
 
     @action(detail=False, methods=['get'])
     def get_evapotranspiration(self, request):

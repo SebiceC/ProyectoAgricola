@@ -1,17 +1,11 @@
-from rest_framework import routers
 from django.urls import path
+from .views import EtoViewSet, EvapotranspirationViewSet
 
-from .views import UbicacionViewSet, SueloViewSet, PrecipitacionViewSet, EtoViewSet, EvapotranspirationViewSet
-router = routers.DefaultRouter()
 
-router.register("api/ubicacion", UbicacionViewSet, basename="ubicacion")
-router.register("api/suelo", SueloViewSet, basename="suelo")
-router.register("api/precipitacion", PrecipitacionViewSet, basename="precipitacion")
-router.register("api/eto", EtoViewSet, basename="eto")
-router.register("api/evapotranspiracion", EvapotranspirationViewSet, basename="evapotranspiracion")
-
-urlpatterns = router.urls
-
+urlpatterns = [
+    path('api/eto/calculate_eto_manual/', EtoViewSet.as_view({'post': 'calculate_eto_manual'}), name='api-calculate-eto-manual'),
+    path('api/eto/get_evapotranspiration/', EvapotranspirationViewSet.as_view({'get': 'get_evapotranspiration'}), name='api-get-evapotranspiration'),
+]
 
 #from django.urls import path
 #from .views import UserViewSet

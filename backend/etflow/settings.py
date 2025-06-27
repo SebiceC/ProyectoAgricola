@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     'rest_framework_simplejwt.token_blacklist',
     'cultivos',
-    'ubicaciones',
+    'climate_and_eto',
     'usuarios',
     'riegos',
     'corsheaders',

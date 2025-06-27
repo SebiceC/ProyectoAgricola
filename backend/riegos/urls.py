@@ -1,5 +1,5 @@
 from rest_framework import routers
-from .api import RiegosViewSet
+from .views import RiegosViewSet
 
 router = routers.DefaultRouter()
 
