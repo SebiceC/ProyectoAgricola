@@ -59,6 +59,8 @@ class EtoSerializer(serializers.ModelSerializer):
         required=True,
     )
 
+    eto_by_month = serializers.ListField(child=serializers.FloatField(), read_only=True)
+
     class Meta:
         model = Eto
         fields = (
@@ -86,6 +88,7 @@ class EtoSerializer(serializers.ModelSerializer):
             "data_frequency",
             "daily_data",
             "monthly_data",
+            "eto_by_month",
         )
 
         read_only_fields = (
@@ -151,8 +154,6 @@ class EtoSerializer(serializers.ModelSerializer):
                     )
                 
         elif freq == "monthly":
-            if len(monthly) != 1:
-                raise serializers.ValidationError("currently only one month is expected in monthly data")
             for item in monthly:
                 if item['minimum_temperature'] > item['maximum_temperature']:
                     raise serializers.ValidationError(

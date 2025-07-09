@@ -95,11 +95,11 @@ WSGI_APPLICATION = "etflow.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default='postgresql://etflow_admin_real:vxsAZebsP5RQzy59jB9RFl70ES0sRRN1@dpg-d12r6lruibrs73fhi470-a.virginia-postgres.render.com/etflowdb',
+        default='postgresql://etflowdb_qm7z_user:dR0yBE4jsRuJTDN2UV1sCpegln7ol9Ns@dpg-d1ncdqumcj7s73dm0kg0-a.virginia-postgres.render.com:5432/etflowdb_qm7z?sslmode=require',
         conn_max_age=600,
+        ssl_require=True
     )
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
