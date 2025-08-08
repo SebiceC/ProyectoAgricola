@@ -45,6 +45,7 @@ export const UserProvider = ({ children }) => {
     localStorage.setItem('token', token);
     setToken(token);
     setUser(userData);
+    console.log('User logged in:', userData);
   };
 
   const logout = () => {

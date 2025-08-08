@@ -3,7 +3,7 @@ import { useUser } from '../contexts/UserContext';
 export default function AdminRoute({ children }) {
   const { user } = useUser();
 
-  return user?.role === 'admin' ? (
+  return user?.role?.includes('Administrador') ? (
     children
   ) : (
     <div style={{ padding: '20px', textAlign: 'center' }}>

@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import EditUserModal from './components/EditUserModal';
 import { TablePagination } from '@mui/material';
 import CreateUserModal from './components/CreateUserModal';
+import { useUser } from '../../contexts/UserContext';
 
 const UsersManagement = () => {
   // 📌 Aquí inician los estados del componente
@@ -31,8 +32,9 @@ const UsersManagement = () => {
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const handleOpenCreate = () => setOpenCreateModal(true);
   const handleCloseCreate = () => setOpenCreateModal(false);
+  const { token } = useUser();
 
-  const URL = import.meta.env.VITE_URL_BACKEND_API + 'usuarios';
+  const URL = import.meta.env.VITE_URL_BACKEND_API + 'usuarios/api/users/';
 
   // 🚀 Función para buscar usuarios
   const handleSearch = (e) => {
@@ -41,13 +43,13 @@ const UsersManagement = () => {
 
     const filtered = users.filter(
       (user) =>
-        user.nombre_usuario?.toLowerCase().includes(value) ||
+        user.first_name?.toLowerCase().includes(value) ||
         '' ||
-        user.apellido_usuario?.toLowerCase().includes(value) ||
+        user.last_name?.toLowerCase().includes(value) ||
         '' ||
-        user.email_usuario?.toLowerCase().includes(value) ||
+        user.email?.toLowerCase().includes(value) ||
         '' ||
-        user.rol_id?.toLowerCase().includes(value) ||
+        user.groups?.toLowerCase().includes(value) ||
         ''
     );
 
@@ -63,17 +65,19 @@ const UsersManagement = () => {
   };
 
   // 🚀 Función para traer los usuarios del backend
-  const fetchUsers = async () => {
+  const fetchUsers = async (token) => {
     try {
       const response = await fetch(URL, {
         method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
         }
       });
       const data = await response.json();
-      setUsers(data);
-      setFilteredUsers(data); // Inicializa la tabla completa
+      const sortedUsers = data.data.sort((a, b) => a.id - b.id);
+      setUsers(sortedUsers);
+      setFilteredUsers(sortedUsers);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -82,8 +86,10 @@ const UsersManagement = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (token) {
+      fetchUsers(token);
+    }
+  }, [token]);
 
   // 🚀 Función para abrir el modal de edición
   const handleOpenEdit = (user) => {
@@ -100,10 +106,11 @@ const UsersManagement = () => {
   const handleDeleteUser = async (userId) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
-        const response = await fetch(`${URL}/${userId}`, {
+        const response = await fetch(`${URL}${userId}/delete`, {
           method: 'DELETE',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
           }
         });
 
@@ -145,23 +152,45 @@ const UsersManagement = () => {
                 <TableCell>Nombre</TableCell>
                 <TableCell>Apellido</TableCell>
                 <TableCell>Correo</TableCell>
-                <TableCell>Rol</TableCell>
-                <TableCell>Acciones</TableCell>
+                <TableCell>Documento</TableCell>
+                <TableCell>Fecha de nacimiento</TableCell>
+                <TableCell>Pais</TableCell>
+                <TableCell>Institucion</TableCell>
+                <TableCell>Carrera</TableCell>
+                <TableCell>Telefono</TableCell>
+                <TableCell>Rol/roles</TableCell>
+                <TableCell>Permisos</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {(search ? filteredUsers : users).slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user) => (
-                <TableRow key={user.id_usuario}>
-                  <TableCell>{user.id_usuario}</TableCell>
-                  <TableCell>{user.nombre_usuario}</TableCell>
-                  <TableCell>{user.apellido_usuario}</TableCell>
-                  <TableCell>{user.email_usuario}</TableCell>
-                  <TableCell>{user.rol_id}</TableCell>
+                <TableRow key={user.id}>
+                  <TableCell>{user.id}</TableCell>
+                  <TableCell>{user.first_name}</TableCell>
+                  <TableCell>{user.last_name}</TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.document_id}</TableCell>
+                  <TableCell>{user.fecha_nacimiento}</TableCell>
+                  <TableCell>{user.pais}</TableCell>
+                  <TableCell>{user.institucion}</TableCell>
+                  <TableCell>{user.carrera}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '0.85rem' }}>
+                    {user.groups.map((g) => g.name).join(', ')}
+                  </TableCell>
+
+                  <TableCell sx={{ whiteSpace: 'normal', wordBreak: 'break-word', fontSize: '0.85rem' }}>
+                    {(() => {
+                      const perms = user.user_permissions;
+                      const firstThree = perms.slice(0, 3).join(', ');
+                      const remaining = perms.length - 3;
+                      return `${firstThree}${remaining > 0 ? ` +${remaining} más` : ''}`;
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <Button variant="contained" color="primary" size="small" sx={{ mr: 1 }} onClick={() => handleOpenEdit(user)}>
                       Editar
                     </Button>
-                    <Button variant="contained" color="error" size="small" onClick={() => handleDeleteUser(user.id_usuario)}>
+                    <Button variant="contained" color="error" size="small" onClick={() => handleDeleteUser(user.id)}>
                       Eliminar
                     </Button>
                   </TableCell>
