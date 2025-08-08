@@ -142,7 +142,7 @@ class EtoSerializer(serializers.ModelSerializer):
                     f"the amount of daily data ({len(daily)}) should match with the number between start_date and end_date ({expected_days})."
                 )
             for item in daily:
-                if item['minimum_temperature'] > item['maximum_temperature']:
+                if item["minimum_temperature"] > item["maximum_temperature"]:
                     raise serializers.ValidationError(
                         f"Minimum temperature {item['minimum_temperature']} exceeds maximum temperature {item['maximum_temperature']} on day {item['date']}."
                     )
@@ -152,10 +152,10 @@ class EtoSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         f"date {item['date']} is out or range between {start_date} and {end_date}."
                     )
-                
+
         elif freq == "monthly":
             for item in monthly:
-                if item['minimum_temperature'] > item['maximum_temperature']:
+                if item["minimum_temperature"] > item["maximum_temperature"]:
                     raise serializers.ValidationError(
                         f"Minimum temperature {item['minimum_temperature']} exceeds maximum temperature {item['maximum_temperature']} on month {item['month']}."
                     )
@@ -259,7 +259,6 @@ class EtoSerializer(serializers.ModelSerializer):
 
         print(f"Method: {method}, Frequency: {frequency}")
 
-
         if method == "penman-monteith":
             altitude = data["altitude"]
 
@@ -272,7 +271,7 @@ class EtoSerializer(serializers.ModelSerializer):
                 rh_list = [d["relative_humidity"] for d in daily_data]
                 wind_list = [d["wind_speed"] for d in daily_data]
                 sun_list = [d["sunshine_hours"] for d in daily_data]
-               
+
                 total_eto = 0
                 for i in range(len(daily_data)):
                     t_mean = (tmax_list[i] + tmin_list[i]) / 2
@@ -311,7 +310,7 @@ class EtoSerializer(serializers.ModelSerializer):
                     "average_wind_speed": round(sum(wind_list) / len(wind_list), 2),
                     "average_sunshine_hours": round(sum(sun_list) / len(sun_list), 2),
                 }
-            
+
             elif frequency == "monthly":
                 monthly_data = data["monthly_data"]
                 m = monthly_data[0]
@@ -329,11 +328,16 @@ class EtoSerializer(serializers.ModelSerializer):
                 es_tmin = 0.6108 * math.exp((17.27 * tmin) / (tmin + 237.3))
                 es = (es_tmax + es_tmin) / 2.0
                 ea = es * (rh / 100.0)
-                delta = (4098 * (0.6108 * math.exp((17.27 * t_mean) / (t_mean + 237.3)))) / ((t_mean + 237.3) ** 2)
+                delta = (
+                    4098 * (0.6108 * math.exp((17.27 * t_mean) / (t_mean + 237.3)))
+                ) / ((t_mean + 237.3) ** 2)
                 delta_es = es - ea
                 rn = sun
                 g = 0
-                eto = ((0.408 * delta * (rn - g)) + (gamma * (900 / (t_mean + 273)) * wind * delta_es)) / (delta + gamma * (1 + 0.34 * wind))
+                eto = (
+                    (0.408 * delta * (rn - g))
+                    + (gamma * (900 / (t_mean + 273)) * wind * delta_es)
+                ) / (delta + gamma * (1 + 0.34 * wind))
 
                 return {
                     "reference_evapotranspiration": round(eto, 2),
@@ -384,12 +388,14 @@ class EtoSerializer(serializers.ModelSerializer):
         monthly_data = validated_data.get("monthly_data")
         data_frequency = validated_data.get("data_frequency")
 
-        result = self.calculate_eto({
-            **validated_data,
-            "daily_data": daily_data,
-            "monthly_data": monthly_data,
-            "data_frequency": data_frequency,
-        })
+        result = self.calculate_eto(
+            {
+                **validated_data,
+                "daily_data": daily_data,
+                "monthly_data": monthly_data,
+                "data_frequency": data_frequency,
+            }
+        )
 
         if not result or not isinstance(result, dict):
             raise serializers.ValidationError(

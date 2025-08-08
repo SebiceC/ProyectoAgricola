@@ -3,7 +3,11 @@ import jwt
 from django.conf import settings
 from django.core.cache import cache
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
+
 
 class AuthService:
     @staticmethod
@@ -12,17 +16,19 @@ class AuthService:
         Genera tokens de acceso y refresh para un usuario
         """
         refresh = RefreshToken.for_user(user)
-        
+
         return {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': {
-                'id': user.id,
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'groups': list(user.groups.values_list('name', flat=True))  # Lista de nombres de grupos
-            }
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "groups": list(
+                    user.groups.values_list("name", flat=True)
+                ),  # Lista de nombres de grupos
+            },
         }
 
     @staticmethod
@@ -31,7 +37,7 @@ class AuthService:
         Verifica si un token es válido
         """
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             return payload
         except jwt.ExpiredSignatureError:
             return None
@@ -45,9 +51,7 @@ class AuthService:
         """
         try:
             refresh = RefreshToken(refresh_token)
-            return {
-                'access': str(refresh.access_token)
-            }
+            return {"access": str(refresh.access_token)}
         except Exception:
             return None
 
@@ -78,7 +82,7 @@ class AuthService:
         """
         Almacena datos de sesión en caché
         """
-        cache_key = f'user_session_{user_id}'
+        cache_key = f"user_session_{user_id}"
         cache.set(cache_key, session_data, timeout=86400)  # 24 horas
 
     @staticmethod
@@ -86,7 +90,7 @@ class AuthService:
         """
         Obtiene datos de sesión de caché
         """
-        cache_key = f'user_session_{user_id}'
+        cache_key = f"user_session_{user_id}"
         return cache.get(cache_key)
 
     @staticmethod
@@ -94,5 +98,5 @@ class AuthService:
         """
         Limpia datos de sesión de caché
         """
-        cache_key = f'user_session_{user_id}'
-        cache.delete(cache_key) 
+        cache_key = f"user_session_{user_id}"
+        cache.delete(cache_key)

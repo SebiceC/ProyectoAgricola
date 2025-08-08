@@ -7,6 +7,7 @@ from django.utils.functional import SimpleLazyObject
 from django.contrib.auth.middleware import get_user
 from django.contrib.auth.models import AnonymousUser
 
+
 class JWTAuthenticationMiddleware(MiddlewareMixin):
     def process_request(self, request):
         """
@@ -14,10 +15,10 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
         """
         # Lista de rutas que no requieren autenticación
         public_paths = [
-            '/api/login/',
-            '/api/register/',
-            '/api/verify-otp/',
-            '/api/refresh-token/',
+            "/api/login/",
+            "/api/register/",
+            "/api/verify-otp/",
+            "/api/refresh-token/",
         ]
 
         # Si la ruta es pública, no verificamos el token
@@ -25,12 +26,12 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
             return None
 
         # Obtener el token del header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
             return None
 
-        token = auth_header.split(' ')[1]
-        
+        token = auth_header.split(" ")[1]
+
         # Verificar si el token está en la lista negra
         if AuthService.is_token_blacklisted(token):
             return None
@@ -52,7 +53,7 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
         user = get_user(request)
         if user.is_authenticated:
             return user
-        
+
         jwt_authentication = JWTAuthentication()
         if jwt_authentication.get_header(request):
             try:
@@ -61,4 +62,4 @@ class JWTAuthenticationMiddleware(MiddlewareMixin):
                     return user_auth_tuple[0]
             except Exception:
                 pass
-        return AnonymousUser() 
+        return AnonymousUser()

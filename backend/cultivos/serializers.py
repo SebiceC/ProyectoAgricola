@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Cultivos, Etapa
 
+
 class CultivosSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cultivos
@@ -14,7 +15,7 @@ class CultivosSerializer(serializers.ModelSerializer):
             "factor_respuesta",
         )
         read_only_fields = ("id_cultivo",)
-        
+
 
 class EtapaSerializer(serializers.ModelSerializer):
     class Meta:

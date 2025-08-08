@@ -3,12 +3,20 @@ from .views import EtoViewSet, EvapotranspirationViewSet
 
 
 urlpatterns = [
-    path('api/eto/calculate_eto_manual/', EtoViewSet.as_view({'post': 'calculate_eto_manual'}), name='api-calculate-eto-manual'),
-    path('api/eto/get_evapotranspiration/', EvapotranspirationViewSet.as_view({'get': 'get_evapotranspiration'}), name='api-get-evapotranspiration'),
+    path(
+        "api/eto/calculate_eto_manual/",
+        EtoViewSet.as_view({"post": "calculate_eto_manual"}),
+        name="api-calculate-eto-manual",
+    ),
+    path(
+        "api/eto/get_evapotranspiration/",
+        EvapotranspirationViewSet.as_view({"get": "get_evapotranspiration"}),
+        name="api-get-evapotranspiration",
+    ),
 ]
 
-#from django.urls import path
-#from .views import UserViewSet
+# from django.urls import path
+# from .views import UserViewSet
 
 
 # urlpatterns = [

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Riegos
 
+
 class RiegosSerializer(serializers.ModelSerializer):
     class Meta:
         model = Riegos
@@ -11,6 +12,4 @@ class RiegosSerializer(serializers.ModelSerializer):
             "cantidad_agua",
             "tipo_riego",
         )
-        read_only_fields = ("id_riego")
-
-        
+        read_only_fields = "id_riego"

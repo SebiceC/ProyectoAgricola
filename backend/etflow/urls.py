@@ -19,8 +19,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import HttpResponse
 
+
 def home(request):
-    return HttpResponse("Welcome to the ETFlow API. Use the endpoints provided in the documentation to interact with the system.")
+    return HttpResponse(
+        "Welcome to the ETFlow API. Use the endpoints provided in the documentation to interact with the system."
+    )
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -28,5 +32,5 @@ urlpatterns = [
     path("climate_and_eto/", include("climate_and_eto.urls")),
     path("riegos/", include("riegos.urls")),
     path("cultivos/", include("cultivos.urls")),
-    path('', home),
+    path("", home),
 ]
