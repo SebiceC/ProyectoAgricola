@@ -25,7 +25,7 @@ def home(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("usuarios/", include("usuarios.urls")),
-    path("ubicaciones/", include("ubicaciones.urls")),
+    path("climate_and_eto/", include("climate_and_eto.urls")),
     path("riegos/", include("riegos.urls")),
     path("cultivos/", include("cultivos.urls")),
     path('', home),

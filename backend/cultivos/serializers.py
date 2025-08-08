@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cultivos, Etapa, CultivoSuelo, CultivoUbicacion
+from .models import Cultivos, Etapa
 
 class CultivosSerializer(serializers.ModelSerializer):
     class Meta:
@@ -29,21 +29,3 @@ class EtapaSerializer(serializers.ModelSerializer):
             "kc_final",
         )
         read_only_fields = ("id_etapa",)
-
-class CultivoSueloSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CultivoSuelo
-        fields = (
-            "id_cultivo",
-            "id_suelo",
-        )
-        read_only_fields = ("id_cultivo","id_suelo",)
-
-class CultivoUbicacionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CultivoUbicacion
-        fields = (
-            "id_cultivo",
-            "id_ubicacion",
-        )
-        read_only_fields = ("id_cultivo","id_ubicacion",)

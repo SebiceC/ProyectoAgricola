@@ -7,11 +7,10 @@ class RiegosSerializer(serializers.ModelSerializer):
         fields = (
             "id_riego",
             "id_cultivo",
-            "id_ubicacion",
             "fecha_riego",
             "cantidad_agua",
             "tipo_riego",
         )
-        read_only_fields = ("id_riego",)
+        read_only_fields = ("id_riego")
 
         
