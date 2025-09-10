@@ -1,23 +1,2 @@
-# Entornos virtuales
-entornoETFlow/
-venv/
-.venv/
-
-# Variables de entorno
 .env
-
-# Archivos de caché de Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Configuración de VSCode
-.vscode/
-
-# Archivos de base de datos locales
-*.sqlite3
-
-# Archivos temporales del sistema
-.DS_Store
-Thumbs.db
+venv

@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class ClimateAndEtoConfig(AppConfig):
+class UsersConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "climate_and_eto"
+    name = "users"
