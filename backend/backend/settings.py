@@ -76,7 +76,7 @@ REST_FRAMEWORK = {
 
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Mi API',
+    'TITLE': 'API DOCUMENTATION',
     'DESCRIPTION': 'Documentación de mi API con Swagger y DRF',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

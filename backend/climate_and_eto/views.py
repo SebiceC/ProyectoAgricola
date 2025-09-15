@@ -7,7 +7,7 @@ from datetime import datetime
 from .services.eto_calculator import ETOCalculatorService
 import traceback
 from drf_spectacular.utils import extend_schema
-from .serializers import CalculateETORequestSerializer, CalculateETOResponseSerializer
+from .serializers import CalculateETORequestSerializer, CalculateETOResponseSerializer, AvailableMethodsResponseSerializer
 
 
 @extend_schema(
@@ -58,6 +58,11 @@ def calculate_eto_from_nasa(request):
             'success': False,
             'error': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@extend_schema(
+    responses={200: AvailableMethodsResponseSerializer}        
+)
 
 @api_view(['GET'])
 def available_methods(request):

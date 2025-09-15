@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from .models import CustomUser
 from django.contrib.auth.models import Group
+from drf_spectacular.utils import extend_schema_field
 
 
 
@@ -18,6 +19,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
             'password': {'write_only': True},
         }
 
+    
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
         user = super().create(validated_data)
@@ -37,6 +39,7 @@ class CustomUserSerializer(serializers.ModelSerializer):
             validated_data['password'] = make_password(validated_data['password'])
         return super().update(instance, validated_data)
     
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_role(self, obj):
         return list(obj.groups.values_list('name',flat=True))
 
@@ -64,6 +67,13 @@ class RemoveRoleSerializer(serializers.Serializer):
         role_name = validated_data.get("role")
         instance.groups.remove(*instance.groups.filter(name=role_name))
         return instance
+
+class AssignRoleResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    role = serializers.CharField()
+
+class RemoveRoleResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
 
 
 class ChangePasswordSerializer(serializers.Serializer):

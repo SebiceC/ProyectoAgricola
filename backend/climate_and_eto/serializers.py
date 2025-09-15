@@ -96,3 +96,8 @@ class CalculateETOResponseSerializer(serializers.Serializer):
     period = serializers.CharField()
     coordinates = serializers.CharField()
     observations = serializers.CharField(allow_blank=True)
+
+class AvailableMethodsResponseSerializer(serializers.Serializer):
+    methods = serializers.ListField(
+        child=serializers.CharField()
+    )
