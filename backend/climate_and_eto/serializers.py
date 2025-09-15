@@ -61,3 +61,38 @@ class EtoCalculatedSerializer(serializers.ModelSerializer):
             eto_calculated.save()
 
         return eto_calculated
+    
+
+# Serializers para la documentacion
+
+class CalculateETORequestSerializer(serializers.Serializer):
+    latitude = serializers.FloatField()
+    longitude = serializers.FloatField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    method = serializers.ChoiceField(
+        choices=['penman-monteith', 'hargreaves', 'turc', 'makkink', 'makkink-abstew', 'simple-abstew', 'priestley-taylor', 'ivanon', 'christiansen'],
+        default='penman-monteith'
+    )
+    altitude = serializers.FloatField(required=False, default=0)
+
+    ETO_METHODS = [
+        ("penman-monteith", "FAO Penman-Monteith"),
+        ("hargreaves", "Hargreaves-Samani (1985)"),
+        ("turc", "Turc"),
+        ("makkink", "Makkink (1957)"),
+        ("makkink-abstew", "Makkink-Abstew"),
+        ("simple-abstew", "Simple Abstew (1996)"),
+        ("priestley-taylor", "Priestley-Taylor"),
+        ("ivanov", "Ivanov (1954)"),
+        ("christiansen", "Christiansen"),
+    ]
+
+
+class CalculateETOResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    eto = serializers.FloatField()
+    method = serializers.CharField()
+    period = serializers.CharField()
+    coordinates = serializers.CharField()
+    observations = serializers.CharField(allow_blank=True)

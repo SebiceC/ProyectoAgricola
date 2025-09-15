@@ -4,33 +4,34 @@ from rest_framework import status
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.models import Group
-from .models import CustomUser
 from .serializers import CustomUserSerializer
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from drf_spectacular.utils import extend_schema
 
+@extend_schema(
+    request=CustomUserSerializer,
+    responses={201: CustomUserSerializer}
+)
 class CustomUserRegisterView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = []
+
     def post(self, request):
         serializer = CustomUserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        group, created = Group.objects.get_or_create(name="user")
+        group, created = Group.objects.get_or_create(name="usuario")
         user.groups.add(group)
-        return Response({"message": "User registered"}, status=status.HTTP_201_CREATED)
+        return Response(CustomUserSerializer(user).data, status=status.HTTP_201_CREATED)
+
     
 class CustomUserLoginView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = []
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
 
-        print("Email recibido:", email)
-        print("Password recibido:", password)
-
         user = authenticate(request, username=email, password=password)
-
-        print("Usuario autenticado:", user)
         
         if user:
             # Crear o recuperar token
@@ -40,7 +41,6 @@ class CustomUserLoginView(APIView):
                 "token": token.key,
                 "user_id": user.id,
                 "email": user.email,
-                "username": user.username
             }, status=status.HTTP_200_OK)
 
         return Response(
