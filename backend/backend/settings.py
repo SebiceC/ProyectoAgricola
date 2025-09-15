@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     #mis apps
     "users",
     "climate_and_eto",
+    "precipitaciones",
 ]
 
 REST_FRAMEWORK = {
