@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "users",
     "climate_and_eto",
+    "precipitaciones",
 ]
 
 REST_FRAMEWORK = {
