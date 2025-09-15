@@ -64,3 +64,13 @@ class RemoveRoleSerializer(serializers.Serializer):
         role_name = validated_data.get("role")
         instance.groups.remove(*instance.groups.filter(name=role_name))
         return instance
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    
+class CustomUserLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True)
+
