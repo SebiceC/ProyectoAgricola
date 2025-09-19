@@ -1,0 +1,474 @@
+openapi: 3.0.3
+info:
+  title: API DOCUMENTATION
+  version: 1.0.0
+  description: Documentación de mi API con Swagger y DRF
+paths:
+  /api/available-methods/:
+    get:
+      operationId: available_methods_retrieve
+      description: Lista métodos ETO disponibles
+      tags:
+      - available-methods
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableMethodsResponse'
+          description: ''
+  /api/calculate-eto/:
+    post:
+      operationId: calculate_eto_create
+      description: API endpoint para calcular ETO usando datos de NASA
+      tags:
+      - calculate-eto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculateETORequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CalculateETORequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CalculateETORequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculateETOResponse'
+          description: ''
+  /api/users/:
+    get:
+      operationId: users_list
+      tags:
+      - users
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomUser'
+          description: ''
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+    put:
+      operationId: users_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUser'
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+    delete:
+      operationId: users_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      security:
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/users/{id}/assign-role/:
+    post:
+      operationId: users_assign_role_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRole'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignRole'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignRole'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignRoleResponse'
+          description: ''
+  /api/users/{id}/remove-role/:
+    delete:
+      operationId: users_remove_role_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - users
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoveRoleResponse'
+          description: ''
+  /api/users/change-password/:
+    post:
+      operationId: users_change_password_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePassword'
+          description: ''
+  /api/users/login/:
+    post:
+      operationId: users_login_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomUserLogin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomUserLogin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomUserLogin'
+        required: true
+      security:
+      - tokenAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUserLogin'
+          description: ''
+  /api/users/register/:
+    post:
+      operationId: users_register_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomUser'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+components:
+  schemas:
+    AssignRole:
+      type: object
+      properties:
+        role:
+          type: string
+          writeOnly: true
+      required:
+      - role
+    AssignRoleResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        role:
+          type: string
+      required:
+      - message
+      - role
+    AvailableMethodsResponse:
+      type: object
+      properties:
+        methods:
+          type: array
+          items:
+            type: string
+      required:
+      - methods
+    CalculateETORequest:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        method:
+          allOf:
+          - $ref: '#/components/schemas/MethodEnum'
+          default: penman-monteith
+        altitude:
+          type: number
+          format: double
+          default: 0.0
+      required:
+      - end_date
+      - latitude
+      - longitude
+      - start_date
+    CalculateETOResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        eto:
+          type: number
+          format: double
+        method:
+          type: string
+        period:
+          type: string
+        coordinates:
+          type: string
+        observations:
+          type: string
+      required:
+      - coordinates
+      - eto
+      - method
+      - observations
+      - period
+      - success
+    ChangePassword:
+      type: object
+      properties:
+        old_password:
+          type: string
+        new_password:
+          type: string
+      required:
+      - new_password
+      - old_password
+    CustomUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+        role:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - email
+      - id
+      - password
+      - role
+    CustomUserLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+      - email
+      - password
+    MethodEnum:
+      enum:
+      - penman-monteith
+      - hargreaves
+      - turc
+      - makkink
+      - makkink-abstew
+      - simple-abstew
+      - priestley-taylor
+      - ivanon
+      - christiansen
+      type: string
+      description: |-
+        * `penman-monteith` - penman-monteith
+        * `hargreaves` - hargreaves
+        * `turc` - turc
+        * `makkink` - makkink
+        * `makkink-abstew` - makkink-abstew
+        * `simple-abstew` - simple-abstew
+        * `priestley-taylor` - priestley-taylor
+        * `ivanon` - ivanon
+        * `christiansen` - christiansen
+    PatchedCustomUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+        role:
+          type: array
+          items:
+            type: string
+          readOnly: true
+    RemoveRoleResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+  securitySchemes:
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"
