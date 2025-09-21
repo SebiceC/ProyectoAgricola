@@ -47,6 +47,8 @@ LOGGING = {
 }
 
 
+CORS_ALLOW_ALL_ORIGINS = True
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -63,6 +65,7 @@ INSTALLED_APPS = [
     "users",
     "climate_and_eto",
     "precipitaciones",
+    "corsheaders",
 ]
 
 REST_FRAMEWORK = {
@@ -91,6 +94,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
 ]
 
 ROOT_URLCONF = "backend.urls"
