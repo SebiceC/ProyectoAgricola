@@ -6,6 +6,7 @@ import DashboardLayout from 'layout/Dashboard';
 import ProtectedRoute from './ProtectedRoute';
 import AdminRoute from './AdminRoute'; // ✅ nueva importación
 import Eto from 'pages/ETo/Eto';
+import Prec from 'pages/precipitaciones/Prec';
 import UsersManagement from 'pages/admin/UsersManagement';
 import RolesManagement from 'pages/admin/RolesManagement';
 import ErrorBoundary from 'components/ErrorBoundary';
@@ -62,6 +63,10 @@ const MainRoutes = {
     {
       path: 'eto',
       element: <Eto />
+    },
+    {
+      path: 'prec',
+      element: <Prec />
     },
     // Nueva sección de Settings
     {

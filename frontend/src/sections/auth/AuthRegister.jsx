@@ -57,13 +57,14 @@ export default function AuthRegister() {
         last_name: '',
         email: '',
         password: '',
-        password2: '',
-        document_id: '',
-        fecha_nacimiento: '',
-        pais: '',
-        institucion: '',
-        carrera: '',
-        telefono: '',
+        // password2: '',
+        // document_id: '',
+        // fecha_nacimiento: '',
+        // pais: '',
+        // institucion: '',
+        // carrera: '',
+        // telefono: '',
+        username: '',
         submit: null
       }}
       validationSchema={Yup.object().shape({
@@ -71,19 +72,20 @@ export default function AuthRegister() {
         last_name: Yup.string().required('Last Name is required'),
         email: Yup.string().email('Must be a valid email').required('Email is required'),
         password: Yup.string().required('Password is required').max(10),
-        password2: Yup.string()
-          .required('Confirm your password')
-          .oneOf([Yup.ref('password'), null], 'Passwords must match'),
-        document_id: Yup.string().required('Document ID is required'),
-        fecha_nacimiento: Yup.date().required('Birth date is required'),
-        pais: Yup.string().required('pais is required'),
-        institucion: Yup.string().required('Institucion is required'),
-        carrera: Yup.string().required('Career is required'),
-        telefono: Yup.string().required('telefono is required')
+        username: Yup.string().required('Username is required')
+        // password2: Yup.string()
+        //   .required('Confirm your password')
+        //   .oneOf([Yup.ref('password'), null], 'Passwords must match'),
+        // document_id: Yup.string().required('Document ID is required'),
+        // fecha_nacimiento: Yup.date().required('Birth date is required'),
+        // pais: Yup.string().required('pais is required'),
+        // institucion: Yup.string().required('Institucion is required'),
+        // carrera: Yup.string().required('Career is required'),
+        // telefono: Yup.string().required('telefono is required')
       })}
       onSubmit={async (values, { setErrors, setSubmitting }) => {
         try {
-          const res = await fetch(`${import.meta.env.VITE_URL_BACKEND_API}usuarios/api/register/`, {
+          const res = await fetch(`${import.meta.env.VITE_URL_BACKEND_API}api/users/register/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(values)
@@ -134,7 +136,7 @@ export default function AuthRegister() {
               </Grid>
             ))}
 
-            {[
+            {/* {[
               ['document_id', 'Document ID'],
               ['fecha_nacimiento', 'Birth Date', 'date']
             ].map(([name, label, type = 'text']) => (
@@ -171,7 +173,20 @@ export default function AuthRegister() {
                 />
                 {touched[name] && errors[name] && <FormHelperText error>{errors[name]}</FormHelperText>}
               </Grid>
-            ))}
+            ))} */}
+
+            <Grid item xs={12}>
+              <InputLabel>Username*</InputLabel>
+              <OutlinedInput
+                fullWidth
+                name="username"
+                value={values.username}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                error={Boolean(touched.username && errors.username)}
+              />
+              {touched.username && errors.username && <FormHelperText error>{errors.username}</FormHelperText>}
+            </Grid>
 
             <Grid item xs={12}>
               <InputLabel>Email Address*</InputLabel>
@@ -187,8 +202,7 @@ export default function AuthRegister() {
             </Grid>
 
             {[
-              ['password', 'Password'],
-              ['password2', 'Confirm Password']
+              ['password', 'Password']
             ].map(([name, label]) => (
               <Grid item xs={12} md={6} key={name}>
                 <InputLabel>{label}</InputLabel>
@@ -211,6 +225,8 @@ export default function AuthRegister() {
                 {touched[name] && errors[name] && <FormHelperText error>{errors[name]}</FormHelperText>}
               </Grid>
             ))}
+
+            
 
             {errors.submit && (
               <Grid item xs={12}>

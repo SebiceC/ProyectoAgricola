@@ -16,7 +16,10 @@ import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
 
 // project imports
 import MainCard from 'components/MainCard';
@@ -39,6 +42,11 @@ const defaultConfig = {
 
 export default function Eto() {
   const [config, setConfig] = useState(defaultConfig);
+  const [availableMethods, setAvailableMethods] = useState([]);
+  const [selectedMethod, setSelectedMethod] = useState('penman-monteith');
+  const [isLoadingMethods, setIsLoadingMethods] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [calculationError, setCalculationError] = useState(null);
   
   // Cargar configuración desde localStorage
   useEffect(() => {
@@ -53,6 +61,44 @@ export default function Eto() {
     } catch (error) {
       console.error('Error cargando configuración:', error);
     }
+  }, []);
+
+  // Cargar métodos disponibles desde la API
+  useEffect(() => {
+    const fetchAvailableMethods = async () => {
+      try {
+        setIsLoadingMethods(true);
+        const response = await fetch(`${import.meta.env.VITE_URL_BACKEND_API}api/available-methods/`, {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+            'Authorization': `token ${localStorage.getItem('token')}`,
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableMethods(data.methods || []);
+        } else {
+          console.error('Error fetching methods:', response.statusText);
+          // Fallback a métodos por defecto si la API falla
+          setAvailableMethods([
+            { key: "penman-monteith", name: "FAO Penman-Monteith" },
+            { key: "hargreaves", name: "Hargreaves-Samani (1985)" }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching methods:', error);
+        // Fallback a métodos por defecto
+        setAvailableMethods([
+          { key: "penman-monteith", name: "FAO Penman-Monteith" },
+          { key: "hargreaves", name: "Hargreaves-Samani (1985)" }
+        ]);
+      } finally {
+        setIsLoadingMethods(false);
+      }
+    };
+
+    fetchAvailableMethods();
   }, []);
 
   // Valores iniciales basados en configuración
@@ -252,202 +298,136 @@ export default function Eto() {
     });
   }, [validateValue, getValidationRules]);
 
-  // Verificar si debemos calcular la radiación y ETo
-  const shouldCalculateRadiationAndEto = useCallback((data) => {
-    // Para método de temperatura solamente
-    if (config.etoCalculationMethod === 'temperature_only') {
-      if (config.temperatureMode === 'min_max') {
-        return data.tempMin !== '' && data.tempMax !== '';
-      } else {
-        return data.tempAvg !== '';
-      }
-    }
-    
-    // Para método completo
-    if (config.temperatureMode === 'min_max') {
-      return (
-        data.tempMin !== '' && 
-        data.tempMax !== '' && 
-        data.humidity !== '' && 
-        data.wind !== '' && 
-        data.sunshine !== ''
-      );
-    } else {
-      return (
-        data.tempAvg !== '' && 
-        data.humidity !== '' && 
-        data.wind !== '' && 
-        data.sunshine !== ''
-      );
-    }
-  }, [config]);
+  // Función para preparar datos para la API
+  const prepareApiData = useCallback((monthData, monthIndex) => {
+    const year = new Date().getFullYear();
+    const startDate = new Date(year, monthIndex, 1);
+    const endDate = new Date(year, monthIndex + 1, 0); // Último día del mes
 
-  // Convertir unidades según configuración
-  const convertToStandardUnits = useCallback((data) => {
-    const converted = { ...data };
-
-    // Convertir viento a m/s si está en km/día
-    if (config.windSpeedUnit === 'kilometers_per_day' && data.wind !== '') {
-      converted.wind = parseFloat(data.wind) / 86.4; // km/día to m/s
-    }
-
-    // Convertir insolación a horas si es necesario
-    if (data.sunshine !== '') {
-      const sunshineValue = parseFloat(data.sunshine);
-      if (config.sunshineUnit === 'percentage_day_duration') {
-        // Convertir porcentaje a horas (asumiendo 12 horas de día promedio)
-        converted.sunshine = (sunshineValue / 100) * 12;
-      } else if (config.sunshineUnit === 'fraction_day_duration') {
-        // Convertir fracción a horas
-        converted.sunshine = sunshineValue * 12;
-      }
-    }
-
-    return converted;
-  }, [config]);
-
-  // Función para calcular radiación y ETo
-  const calculateRadiationAndEto = useCallback((data, monthIndex, latitude, altitude) => {
-    try {
-      const convertedData = convertToStandardUnits(data);
-      const latitudeRad = parseFloat(latitude) * (Math.PI / 180);
-      const dayOfYear = Math.floor((monthIndex * 30.4) + 15);
-      
-      // Cálculo de temperatura media
-      let Tmean;
-      if (config.temperatureMode === 'min_max') {
-        Tmean = (parseFloat(convertedData.tempMin) + parseFloat(convertedData.tempMax)) / 2;
-      } else {
-        Tmean = parseFloat(convertedData.tempAvg);
-      }
-
-      let ETo;
-
-      if (config.etoCalculationMethod === 'temperature_only') {
-        // Método simplificado basado solo en temperatura (Hargreaves-Samani)
-        const Ra = calculateExtraterrestrialRadiation(latitudeRad, dayOfYear);
-        const tempRange = config.temperatureMode === 'min_max' 
-          ? Math.abs(parseFloat(convertedData.tempMax) - parseFloat(convertedData.tempMin))
-          : 10; // Valor estimado para temperatura media
-        
-        ETo = 0.0023 * (Tmean + 17.8) * Math.sqrt(tempRange) * Ra * 0.408;
-      } else {
-        // Método completo Penman-Monteith
-        const calculationResult = calculatePenmanMonteith(convertedData, monthIndex, latitude, altitude, config);
-        return calculationResult;
-      }
-
-      const finalEto = config.etoUnit === 'mm_per_period' ? ETo * 30 : ETo;
-
-      return {
-        radiation: null, // No se calcula para método simplificado
-        eto: parseFloat(finalEto.toFixed(1))
-      };
-    } catch (error) {
-      console.error("Error en cálculos:", error);
-      return {
-        radiation: null,
-        eto: null
-      };
-    }
-  }, [config, convertToStandardUnits]);
-
-  // Función auxiliar para calcular radiación extraterrestre
-  const calculateExtraterrestrialRadiation = (latitudeRad, dayOfYear) => {
-    const solarConstant = 0.0820;
-    const dr = 1 + 0.033 * Math.cos(2 * Math.PI * dayOfYear / 365);
-    const deltaValue = 0.409 * Math.sin(2 * Math.PI * dayOfYear / 365 - 1.39);
-    const ws = Math.acos(-Math.tan(latitudeRad) * Math.tan(deltaValue));
-    return 24 * 60 / Math.PI * solarConstant * dr * (ws * Math.sin(latitudeRad) * Math.sin(deltaValue) + Math.cos(latitudeRad) * Math.cos(deltaValue) * Math.sin(ws));
-  };
-
-  // Función completa Penman-Monteith
-  const calculatePenmanMonteith = (data, monthIndex, latitude, altitude, config) => {
-    const latitudeRad = parseFloat(latitude) * (Math.PI / 180);
-    const dayOfYear = Math.floor((monthIndex * 30.4) + 15);
-    
-    // Radiación extraterrestre
-    const Ra = calculateExtraterrestrialRadiation(latitudeRad, dayOfYear);
-    
-    // Duración máxima posible de la insolación
-    const deltaValue = 0.409 * Math.sin(2 * Math.PI * dayOfYear / 365 - 1.39);
-    const ws = Math.acos(-Math.tan(latitudeRad) * Math.tan(deltaValue));
-    const N = 24 * ws / Math.PI;
-    
-    // Radiación solar
-    const Rs = (0.25 + 0.5 * parseFloat(data.sunshine) / N) * Ra;
-    
-    // Temperatura media
-    let Tmean;
-    if (config.temperatureMode === 'min_max') {
-      Tmean = (parseFloat(data.tempMin) + parseFloat(data.tempMax)) / 2;
-    } else {
-      Tmean = parseFloat(data.tempAvg);
-    }
-
-    // Presión de saturación de vapor
-    let es, ea;
-    if (config.temperatureMode === 'min_max') {
-      const es_Tmax = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMax) / (parseFloat(data.tempMax) + 237.3));
-      const es_Tmin = 0.6108 * Math.exp(17.27 * parseFloat(data.tempMin) / (parseFloat(data.tempMin) + 237.3));
-      es = (es_Tmax + es_Tmin) / 2;
-    } else {
-      es = 0.6108 * Math.exp(17.27 * Tmean / (Tmean + 237.3));
-    }
-
-    // Presión real de vapor
-    if (config.humidityUnit === 'relative_percent') {
-      ea = es * parseFloat(data.humidity) / 100;
-    } else {
-      ea = parseFloat(data.humidity); // Ya está en kPa
-    }
-    
-    // Pendiente de la curva de presión de vapor
-    const slopeValue = 4098 * (0.6108 * Math.exp(17.27 * Tmean / (Tmean + 237.3))) / Math.pow((Tmean + 237.3), 2);
-    
-    // Constante psicrométrica
-    const altitudeValue = parseFloat(altitude) || 0;
-    const P = 101.3 * Math.pow((293 - 0.0065 * altitudeValue) / 293, 5.26);
-    const gamma = 0.000665 * P;
-    
-    // Radiación neta (simplificada)
-    const Rns = (1 - 0.23) * Rs;
-    const Rnl = 4.903e-9 * ((Math.pow(Tmean + 273.16, 4))) * (0.34 - 0.14 * Math.sqrt(ea)) * (1.35 * Rs / Ra - 0.35);
-    const Rn = Rns - Rnl;
-    
-    // ETo
-    const term1 = 0.408 * slopeValue * Rn;
-    const term2 = gamma * (900 / (Tmean + 273)) * parseFloat(data.wind) * (es - ea);
-    const term3 = slopeValue + gamma * (1 + 0.34 * parseFloat(data.wind));
-    
-    const ETo = (term1 + term2) / term3;
-    const finalEto = config.etoUnit === 'mm_per_period' ? ETo * 30 : ETo;
-    
-    return {
-      radiation: parseFloat(Rs.toFixed(1)),
-      eto: parseFloat(finalEto.toFixed(1))
+    // Convertir datos según configuración
+    const apiData = {
+      latitude: parseFloat(stationInfo.latDirection === 'S' ? -stationInfo.latitude : stationInfo.latitude),
+      longitude: parseFloat(stationInfo.longDirection === 'W' ? -stationInfo.longitude : stationInfo.longitude),
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      method: selectedMethod,
+      altitude: parseFloat(stationInfo.altitude) || 0
     };
-  };
 
-  // Usar useMemo para calcular los datos climáticos con radiación y ETo
-  const climateData = useMemo(() => {
-    return inputClimateData.map((data, index) => {
-      if (shouldCalculateRadiationAndEto(data)) {
-        const calculations = calculateRadiationAndEto(data, index, stationInfo.latitude, stationInfo.altitude);
+    // Agregar datos climáticos según configuración
+    if (config.temperatureMode === 'min_max') {
+      apiData.temp_min = parseFloat(monthData.tempMin);
+      apiData.temp_max = parseFloat(monthData.tempMax);
+    } else {
+      apiData.temp_avg = parseFloat(monthData.tempAvg);
+    }
+
+    // Agregar datos adicionales si es método completo
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      // Humedad
+      if (config.humidityUnit === 'relative_percent') {
+        apiData.humidity_percent = parseFloat(monthData.humidity);
+      } else {
+        apiData.vapor_pressure = parseFloat(monthData.humidity);
+      }
+
+      // Viento
+      if (config.windSpeedUnit === 'meters_per_second') {
+        apiData.wind_speed = parseFloat(monthData.wind);
+      } else {
+        apiData.wind_speed = parseFloat(monthData.wind) / 86.4; // Convertir km/día a m/s
+      }
+
+      // Insolación
+      let sunshineHours = parseFloat(monthData.sunshine);
+      if (config.sunshineUnit === 'percentage_day_duration') {
+        sunshineHours = (sunshineHours / 100) * 12; // Convertir % a horas
+      } else if (config.sunshineUnit === 'fraction_day_duration') {
+        sunshineHours = sunshineHours * 12; // Convertir fracción a horas
+      }
+      apiData.sunshine_hours = sunshineHours;
+    }
+
+    return apiData;
+  }, [stationInfo, selectedMethod, config]);
+
+  // Función para verificar si los datos están completos para el cálculo
+  const isDataComplete = useCallback((data) => {
+    if (config.temperatureMode === 'min_max') {
+      if (!data.tempMin || !data.tempMax) return false;
+    } else {
+      if (!data.tempAvg) return false;
+    }
+
+    if (config.etoCalculationMethod === 'full_climate_data') {
+      if (!data.humidity || !data.wind || !data.sunshine) return false;
+    }
+
+    return true;
+  }, [config]);
+
+  // Función para calcular ETo usando la API
+  const calculateEtoForMonth = useCallback(async (monthData, monthIndex) => {
+    if (!isDataComplete(monthData)) {
+      return { radiation: null, eto: null };
+    }
+
+    try {
+      const apiData = prepareApiData(monthData, monthIndex);
+      const response = await fetch(`${import.meta.env.VITE_URL_BACKEND_API}api/calculate-eto/`, {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'Authorization': `token ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(apiData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
         return {
-          ...data,
-          radiation: calculations.radiation,
-          eto: calculations.eto
+          radiation: result.radiation || null,
+          eto: result.eto || null
         };
       } else {
-        return {
-          ...data,
-          radiation: null,
-          eto: null
-        };
+        console.error('API Error:', response.statusText);
+        return { radiation: null, eto: null };
       }
-    });
-  }, [inputClimateData, stationInfo.latitude, stationInfo.altitude, shouldCalculateRadiationAndEto, calculateRadiationAndEto]);
+    } catch (error) {
+      console.error('Error calculating ETo:', error);
+      return { radiation: null, eto: null };
+    }
+  }, [isDataComplete, prepareApiData]);
+
+  // Función para calcular todos los meses
+  const calculateAllMonths = useCallback(async () => {
+    setIsCalculating(true);
+    setCalculationError(null);
+
+    try {
+      const promises = inputClimateData.map((data, index) => 
+        calculateEtoForMonth(data, index)
+      );
+      
+      const results = await Promise.all(promises);
+      
+      setInputClimateData(prev => 
+        prev.map((data, index) => ({
+          ...data,
+          radiation: results[index].radiation,
+          eto: results[index].eto
+        }))
+      );
+    } catch (error) {
+      setCalculationError('Error al calcular ETo. Por favor, intente nuevamente.');
+      console.error('Error calculating all months:', error);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [inputClimateData, calculateEtoForMonth]);
+
+  // Usar climateData directamente desde inputClimateData ya que no calculamos localmente
+  const climateData = inputClimateData;
 
   // Calcular promedios
   const calculateAverages = useCallback(() => {
@@ -473,8 +453,16 @@ export default function Eto() {
       averages.sunshine = parseFloat((validMonths.reduce((sum, data) => sum + (parseFloat(data.sunshine) || 0), 0) / validMonths.length).toFixed(1));
     }
 
-    averages.radiation = parseFloat((validMonths.reduce((sum, data) => sum + (data.radiation || 0), 0) / validMonths.length).toFixed(1));
-    averages.eto = parseFloat((validMonths.reduce((sum, data) => sum + (data.eto || 0), 0) / validMonths.length).toFixed(1));
+    const validRadiationMonths = validMonths.filter(data => data.radiation !== null);
+    const validEtoMonths = validMonths.filter(data => data.eto !== null);
+
+    if (validRadiationMonths.length > 0) {
+      averages.radiation = parseFloat((validRadiationMonths.reduce((sum, data) => sum + (data.radiation || 0), 0) / validRadiationMonths.length).toFixed(1));
+    }
+    
+    if (validEtoMonths.length > 0) {
+      averages.eto = parseFloat((validEtoMonths.reduce((sum, data) => sum + (data.eto || 0), 0) / validEtoMonths.length).toFixed(1));
+    }
 
     return averages;
   }, [climateData, config]);
@@ -738,8 +726,45 @@ export default function Eto() {
   };
 
   return (
-    <MainCard title="Clima/ETo Penman-Monteith">
+    <MainCard 
+      title={
+        <Box display="flex" alignItems="center" gap={2}>
+          <span>Clima/ETo</span>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Método de Cálculo</InputLabel>
+            <Select
+              value={selectedMethod}
+              label="Método de Cálculo"
+              onChange={(e) => setSelectedMethod(e.target.value)}
+              disabled={isLoadingMethods}
+            >
+              {isLoadingMethods ? (
+                <MenuItem disabled>
+                  <CircularProgress size={16} sx={{ mr: 1 }} />
+                  Cargando...
+                </MenuItem>
+              ) : (
+                availableMethods.map((method) => (
+                  <MenuItem key={method.key} value={method.key}>
+                    {method.name}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+          </FormControl>
+        </Box>
+      }
+    >
       <Grid container spacing={2}>
+        {/* Error de cálculo */}
+        {calculationError && (
+          <Grid item xs={12}>
+            <Alert severity="error" onClose={() => setCalculationError(null)}>
+              {calculationError}
+            </Alert>
+          </Grid>
+        )}
+
         {/* Información de la estación */}
         <Grid item xs={12}>
           <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
@@ -889,15 +914,28 @@ export default function Eto() {
                 Limpiar Datos
               </Button>
             </Grid>
+            <Grid item>
+              <Button 
+                variant="contained" 
+                color="success" 
+                onClick={calculateAllMonths}
+                disabled={isCalculating || !stationInfo.latitude || !stationInfo.longitude}
+                startIcon={isCalculating ? <CircularProgress size={16} /> : null}
+              >
+                {isCalculating ? 'Calculando...' : 'Calcular ETo'}
+              </Button>
+            </Grid>
           </Grid>
         </Grid>
 
         {/* Información dinámica basada en configuración */}
         <Grid item xs={12} sx={{ mt: 2 }}>
           <Typography variant="body2">
-            <strong>Método de cálculo:</strong> {config.etoCalculationMethod === 'full_climate_data' 
-              ? 'ETo Penman-Monteith completo con datos climáticos' 
-              : 'ETo simplificado basado en temperatura (Hargreaves-Samani)'}
+            <strong>Método seleccionado:</strong> {availableMethods.find(m => m.key === selectedMethod)?.name || selectedMethod}
+            <br />
+            <strong>Configuración:</strong> {config.etoCalculationMethod === 'full_climate_data' 
+              ? 'Datos climáticos completos requeridos' 
+              : 'Solo temperatura requerida'}
             <br />
             <strong>Modo de temperatura:</strong> {config.temperatureMode === 'min_max' 
               ? 'Temperaturas mínima y máxima' 
@@ -914,7 +952,8 @@ export default function Eto() {
             )}
             {' '}ETo: {config.etoUnit === 'mm_per_day' ? 'mm/día' : 'mm/período'}
             <br />
-            Las celdas amarillas muestran los valores calculados automáticamente.
+            Las celdas amarillas muestran los valores calculados por la API. 
+            Para obtener resultados, complete los datos y haga clic en "Calcular ETo".
           </Typography>
         </Grid>
 
