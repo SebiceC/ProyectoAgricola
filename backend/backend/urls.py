@@ -34,4 +34,6 @@ urlpatterns = [
     path("api/", include("climate_and_eto.urls")),
     path('api/precipitaciones/', include('precipitaciones.urls')),
     path('api/cultivo/', include('cultivo.urls')),
+    path('api/suelo/', include('suelo.urls')),
+    
 ]
