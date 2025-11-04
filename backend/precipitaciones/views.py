@@ -53,6 +53,7 @@ class CargarPrecipitacionesAnioView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class PrecipitationRecordYearListView(APIView):
+    serializer_class = PrecipitationRecordSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
