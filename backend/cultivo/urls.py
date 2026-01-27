@@ -1,8 +1,13 @@
-from django.urls import path
-from .views import CropListView, CropToPlantListCreateView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+# Importa las nuevas clases ViewSet
+from .views import CropViewSet, CropToPlantViewSet 
+
+router = DefaultRouter()
+# El router crea automáticamente todas las rutas (lista, detalle, patch, delete)
+router.register(r'crops', CropViewSet, basename='crop')
+router.register(r'plantings', CropToPlantViewSet, basename='planting')
 
 urlpatterns = [
-    path('crops/', CropListView.as_view(), name='crop-list'),
-    path('crops-plant/', CropToPlantListCreateView.as_view(), name='crop-plant-list-create'),
+    path('', include(router.urls)),
 ]
-

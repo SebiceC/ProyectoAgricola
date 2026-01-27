@@ -1,0 +1,31 @@
+services:
+  web:
+    build: .
+    # En desarrollo usamos runserver para ver cambios en tiempo real
+    # Esperamos a que la DB esté lista antes de arrancar
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app  # Sincroniza tu carpeta actual con el contenedor
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: on-failure
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=agricola_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432" # Expuesto para que puedas conectarte con DBeaver/PgAdmin
+
+volumes:
+  postgres_data:

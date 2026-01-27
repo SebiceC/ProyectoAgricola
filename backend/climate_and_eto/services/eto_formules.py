@@ -17,12 +17,12 @@ class ETOFormulas:
         elevation: float = 0) -> float:
 
         """
-        FAO Penman-Monteith fórmula
+        FAO Penman-Monteith fórmula (Corregida)
         Inputs: 
         - temp_max, temp_min: Temperaturas en °C
         - humidity: Humedad relativa en %
         - wind_speed: Velocidad del viento en m/s
-        - radiation: Radiación solar en MJ/m²/día
+        - radiation: Radiación solar en MJ/m²/día (Asegurarse de conversión kWh -> MJ)
         - latitude: Latitud en grados decimales
         - day_of_year: Día del año (1-365)
         - elevation: Altitud en metros 
@@ -31,38 +31,51 @@ class ETOFormulas:
         # Temperatura promedio
         temp_avg = (temp_max + temp_min) / 2
 
-        # Presión atmosférica 
+        # Presión atmosférica (kPa)
+        # Fórmula FAO 56 Ec. 7
         P = 101.3 * ((293 - 0.0065 * elevation) / 293) ** 5.26
 
-        # Constante psicrométrica
-        gamma = 0.665 * P
+        # Constante psicrométrica (kPa/°C)
+        # Fórmula FAO 56 Ec. 8: gamma = 0.000665 * P
+        # ANTES ESTABA: 0.665 * P (Error crítico, daba valor 1000 veces mayor)
+        gamma = 0.000665 * P
 
-        #Pendiente de la curva de presión de vapor
+        # Pendiente de la curva de presión de vapor (kPa/°C)
+        # Fórmula FAO 56 Ec. 13
         delta = 4098 * (0.6108 * math.exp((17.27 * temp_avg) / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
 
-        # Presion de vapor de saturacion
+        # Presion de vapor de saturacion (kPa)
         es_max = 0.6108 * math.exp((17.27 * temp_max) / (temp_max + 237.3))
         es_min = 0.6108 * math.exp((17.27 * temp_min) / (temp_min + 237.3))
         es = (es_max + es_min) / 2
 
-        # Presion de vapor actual
+        # Presion de vapor actual (kPa)
         ea = es * humidity / 100
 
-        # Deficit de presion de vapor
+        # Deficit de presion de vapor (kPa)
         vpd = es - ea
 
-        # Radiación neta (simplificada)
+        # Radiación neta (MJ/m2/dia)
+        # Simplificación: Rn = 0.77 * Rs (Radiación Solar Global)
+        # Esto asume que 'radiation' ya viene en MJ (gracias a nasa_power_api.py)
         Rn = 0.77 * radiation
 
-        # Flujo de calor del suelo (assumido 0 para periodos diarios)
+        # Flujo de calor del suelo (asumido 0 para periodos diarios)
         G = 0
 
-        #velocidad del viento a 2m
+        # velocidad del viento a 2m
         u2 = wind_speed 
 
-        #Formula FAO Penman-Monteith
-        numerator = 0.408 * delta * (Rn - G) + gamma + 900 / (temp_avg + 273) * u2 * vpd
-        denominator =  delta + gamma * (1+ 0.32 * u2)
+        # Formula FAO Penman-Monteith (CORREGIDA)
+        # Numerador dividido en dos términos para claridad y corrección de precedencia
+        # Término radiativo
+        term_rad = 0.408 * delta * (Rn - G)
+        
+        # Término aerodinámico (Gamma multiplica a todo este bloque)
+        term_aero = gamma * (900 / (temp_avg + 273)) * u2 * vpd
+
+        numerator = term_rad + term_aero
+        denominator = delta + gamma * (1 + 0.34 * u2)
 
         eto = numerator / denominator
 
@@ -98,6 +111,8 @@ class ETOFormulas:
         """
         Formula de Turc
         """
+        # Nota: radiation debe estar en MJ/m2/dia (o calibrar coeficientes si es Cal/cm2)
+        # Coeficiente 23.8856 asume radiación en MJ
         if humidity >= 50:
             eto = 0.013 * (temp_avg / (temp_avg + 15)) * (23.8856 * radiation + 50)
         else:
@@ -113,8 +128,8 @@ class ETOFormulas:
         # Presion atmosferica
         P = 101.3 * ((293 - 0.0065 * elevation) / 293) ** 5.26
 
-        # Constante psicrometrica
-        gamma = 0.665 * P
+        # Constante psicrometrica (Corregida también aquí por seguridad)
+        gamma = 0.000665 * P
 
         # Pendiente de la curva de presion de vapor
         delta = 4098 * (0.6108 * math.exp(17.27 * temp_avg / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
@@ -130,17 +145,12 @@ class ETOFormulas:
         """
         Fórmula Makkink-Abstew
         Versión modificada de Makkink calibrada por Abstew
-        
-        Inputs:
-        - temp_avg: Temperatura promedio en °C
-        - radiation: Radiación solar en MJ/m²/day
-        - elevation: Elevación en metros
         """
         # Presión atmosférica
         P = 101.3 * ((293 - 0.0065 * elevation) / 293) ** 5.26
         
         # Constante psicrométrica
-        gamma = 0.665 * P
+        gamma = 0.000665 * P
         
         # Pendiente de la curva de presión de vapor
         delta = 4098 * (0.6108 * math.exp(17.27 * temp_avg / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
@@ -154,12 +164,6 @@ class ETOFormulas:
     def simple_abstew(temp_max: float, temp_min: float, radiation: float) -> float:
         """
         Simple Abstew (1996)
-        Método simplificado desarrollado por Abstew
-        
-        Inputs:
-        - temp_max: Temperatura máxima en °C
-        - temp_min: Temperatura mínima en °C  
-        - radiation: Radiación solar en MJ/m²/day
         """
         # Temperatura promedio
         temp_avg = (temp_max + temp_min) / 2
@@ -168,7 +172,6 @@ class ETOFormulas:
         temp_range = temp_max - temp_min
         
         # Fórmula Simple Abstew
-        # Basada en correlación empírica entre radiación, temperatura y rango térmico
         eto = 0.0031 * (temp_avg + 17.8) * math.sqrt(temp_range) * radiation / 2.45
         
         return round(max(0, eto), 2)
@@ -182,7 +185,7 @@ class ETOFormulas:
         P = 101.3 * ((293 - 0.0065 * elevation) / 293) ** 5.26
 
         # Constante psicrometrica
-        gamma = 0.665 * P
+        gamma = 0.000665 * P
 
         # Pendiente de la curva de presion de vapor
         delta = 4098 * (0.6108 * math.exp(17.27 * temp_avg / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
@@ -200,11 +203,6 @@ class ETOFormulas:
     def ivanov(temp_avg: float, humidity: float) -> float:
         """
         Fórmula de Ivanov (1954)
-        Método empírico basado en temperatura y humedad
-        
-        Inputs:
-        - temp_avg: Temperatura promedio en °C
-        - humidity: Humedad relativa en %
         """
         # Verificar que la temperatura sea positiva
         if temp_avg <= 0:
@@ -225,16 +223,6 @@ class ETOFormulas:
                     day_of_year: int, elevation: float = 0) -> float:
         """
         Fórmula de Christiansen
-        Método combinado que considera múltiples factores meteorológicos
-        
-        Inputs:
-        - temp_max, temp_min: Temperaturas en °C
-        - humidity: Humedad relativa en %
-        - wind_speed: Velocidad del viento en m/s
-        - radiation: Radiación solar en MJ/m²/day
-        - latitude: Latitud en grados decimales
-        - day_of_year: Día del año (1-365)
-        - elevation: Elevación en metros
         """
         # Temperatura promedio
         temp_avg = (temp_max + temp_min) / 2
@@ -243,7 +231,7 @@ class ETOFormulas:
         P = 101.3 * ((293 - 0.0065 * elevation) / 293) ** 5.26
         
         # Constante psicrométrica
-        gamma = 0.665 * P
+        gamma = 0.000665 * P
         
         # Pendiente de la curva de presión de vapor
         delta = 4098 * (0.6108 * math.exp(17.27 * temp_avg / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
@@ -317,4 +305,3 @@ class ETOFormulas:
             return False, "Velocidad del viento no puede ser negativa"
         
         return True, "OK"
-   

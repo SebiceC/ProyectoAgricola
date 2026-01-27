@@ -1,68 +1,103 @@
 from rest_framework import serializers
 from .models import Crop, CropToPlant
+from suelo.models import Soil
+
 
 class CropSerializer(serializers.ModelSerializer):
     class Meta:
         model = Crop
         fields = '__all__'
+        read_only_fields = ('user',)
+
+    def validate(self, data):
+        """ Validaciones de seguridad agronómica """
+        # Ejemplo: El Kc no suele pasar de 1.4 en ningún cultivo estándar
+        if data.get('kc_medio') and data.get('kc_medio') > 1.6:
+            raise serializers.ValidationError({"kc_medio": "El coeficiente Kc medio parece inusualmente alto (>1.6)."})
+        return data
 
 class CropToPlantSerializer(serializers.ModelSerializer):
-    crear_nuevo_cultivo = serializers.BooleanField(write_only=True)
+    # Campos de control para el Frontend
+    crear_nuevo_cultivo = serializers.BooleanField(write_only=True, default=False)
     crop_data = CropSerializer(write_only=True, required=False)
+    
+    # Nested Serializer para LEER (ver detalles del cultivo en el JSON de respuesta)
+    crop_details = CropSerializer(source='crop', read_only=True)
+    
+    # Campo para seleccionar cultivo existente
     crop = serializers.PrimaryKeyRelatedField(queryset=Crop.objects.all(), required=False)
+
+    soil = serializers.PrimaryKeyRelatedField(
+        queryset=Soil.objects.all(),
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
         model = CropToPlant
         fields = [
-            'id', 'crear_nuevo_cultivo', 'crop', 'crop_data',
-            'fecha_siembra', 'fecha_cosecha', 'altura'
+            'id', 
+            'crear_nuevo_cultivo', 
+            'crop', 
+            'crop_data', 
+            'crop_details',  # Para que el frontend vea qué cultivo es
+            'fecha_siembra', 
+            'area', 
+            'activo',
+            'soil',
         ]
-    
+        read_only_fields = ('user',) # Seguridad: El usuario se inyecta en el backend
+
     def validate(self, attrs):
-        crear_nuevo = attrs.get('crear_nuevo_cultivo')
+        # Si es una actualización parcial (PATCH), 'crear_nuevo_cultivo' podría no venir.
+        # Asumimos False si no viene.
+        crear_nuevo = attrs.get('crear_nuevo_cultivo', False)
         crop_data = attrs.get('crop_data')
         crop = attrs.get('crop')
 
-        if crear_nuevo and not crop_data:
-            raise serializers.ValidationError("Si 'crear_nuevo_cultivo' es True, debe proveer 'crop_data'.")
-        if not crear_nuevo and not crop:
-            raise serializers.ValidationError("Si 'crear_nuevo_cultivo' es False, debe proveer 'crop'.")
-
-        # Validar altura dentro del rango
-        jika_crop = crop if crop else None
-        jika_crop_data = crop_data if crop_data else None
-
-        if crear_nuevo and crop_data:
-            altura_min = crop_data.get('altura_min')
-            altura_max = crop_data.get('altura_max')
-        elif crop:
-            altura_min = crop.altura_min
-            altura_max = crop.altura_max
-        else:
-            altura_min = None
-            altura_max = None
-
-        altura = attrs.get('altura')
-        if altura_min is not None and altura_max is not None:
-            if not (altura_min <= altura <= altura_max):
-                raise serializers.ValidationError(f"La altura debe estar entre {altura_min} y {altura_max}")
+        # Solo validamos la lógica de "Crear vs Existente" si estamos CREANDO una siembra (POST)
+        # o si se enviaron esos campos explícitamente en un PATCH.
+        if self.instance is None or (crear_nuevo or crop):
+            if crear_nuevo:
+                if not crop_data:
+                    raise serializers.ValidationError("Si selecciona 'Crear Nuevo', debe enviar 'crop_data'.")
+                serializer_validacion = CropSerializer(data=crop_data)
+                serializer_validacion.is_valid(raise_exception=True)
+            else:
+                # Si no crea nuevo, exigimos ID de crop (a menos que ya exista en la instancia)
+                if not crop and not self.instance:
+                    raise serializers.ValidationError("Debe enviar el ID de un 'crop' existente.")
 
         return attrs
 
     def create(self, validated_data):
-        crear_nuevo = validated_data.pop('crear_nuevo_cultivo')
+        crear_nuevo = validated_data.pop('crear_nuevo_cultivo', False)
         crop_data = validated_data.pop('crop_data', None)
-        crop = validated_data.pop('crop', None)
+        
         user = self.context['request'].user
         
-        # Eliminar user si ya existe para no duplicar al pasar por kwargs
-        validated_data.pop('user', None)
-        
         if crear_nuevo and crop_data:
-            crop = Crop.objects.create(**crop_data)
-        elif not crear_nuevo and crop:
-            pass
+            crop = Crop.objects.create(user=user, **crop_data)
         else:
-            raise serializers.ValidationError("Error al crear la plantación")
+            crop = validated_data.pop('crop')
+        
+        validated_data.pop('user', None)
 
-        return CropToPlant.objects.create(crop=crop, user=user, **validated_data)
+        # Al crear, 'soil' ya vendrá dentro de **validated_data gracias a la definición del campo arriba
+        planting = CropToPlant.objects.create(
+            user=user,
+            crop=crop,
+            **validated_data
+        )
+        return planting
+
+    # ✅ 2. MAGIA DE LECTURA (to_representation)
+    # Esto convierte el simple ID "5" en el objeto "{id:5, nombre:'Franco', ...}"
+    def to_representation(self, instance):
+        response = super().to_representation(instance)
+        if instance.soil:
+            # ✅ IMPORTACIÓN PEREZOSA (LAZY IMPORT):
+            # Importamos aquí dentro para evitar el Error Circular que tumba el servidor
+            from suelo.serializers import SoilSerializer 
+            response['soil'] = SoilSerializer(instance.soil).data
+        return response

@@ -2,15 +2,25 @@ from django.db import models
 from django.conf import settings
 
 class Soil(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.CASCADE)
-    nombre = models.CharField(max_length=100)
-    humedad_disponible = models.FloatField(help_text="Humedad de suelo disponible total (CC-PMP) en mm/metro")
-    tasa_max_infiltracion = models.FloatField(help_text="Tasa máxima de infiltración de la precipitación en mm/día")
-    profundidad_radicular_max = models.FloatField(help_text="Profundidad radicular máxima en cm")
-    agotamiento_inicial = models.FloatField(help_text="Agotamiento inicial de humedad de suelo (% de ADT)")
-    humedad_inicial = models.FloatField(help_text="Humedad de suelo inicialmente disponible en mm/metro")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    
+    # Identificación
+    nombre = models.CharField(max_length=100, help_text="Ej: Lote Norte")
+    textura = models.CharField(max_length=50, help_text="Ej: Franco, Arcilloso")
+    
+    # Propiedades Hidrodinámicas (Nombres exactos requeridos por views.py)
+    capacidad_campo = models.FloatField(help_text="CC (% Vol)", default=0.0)
+    punto_marchitez = models.FloatField(help_text="PMP (% Vol)", default=0.0)
+    densidad_aparente = models.FloatField(help_text="Da (g/cm3)", default=1.2)
+    
+    # Propiedades adicionales para el cálculo avanzado
+    tasa_max_infiltracion = models.FloatField(default=0.0, help_text="mm/hora")
+    profundidad_radicular_max = models.FloatField(default=1.0, help_text="Metros")
+    humedad_disponible = models.FloatField(default=0.0, help_text="Calculado (CC - PMP)")
+
+    # Auditoría
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        if self.user:
-            return f"{self.nombre} (Usuario: {self.user.username})"
-        return f"{self.nombre} (Base)"
+        return f"{self.nombre} ({self.textura})"
