@@ -1,26 +1,79 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 
 class Station(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='stations')
-    name = models.CharField(max_length=100)
-    latitude = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=8, decimal_places=5, null=True, blank=True)
+    name = models.CharField(max_length=100, verbose_name="Nombre Estación")
+    
+    # Validaciones Geográficas (Integridad de Datos)
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, 
+        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        help_text="Latitud decimal (-90 a 90)"
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, 
+        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        help_text="Longitud decimal (-180 a 180)"
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Activa")
 
     def __str__(self):
-        return f"{self.name} ({self.latitude}, {self.longitude})"
+        return f"{self.name}"
+
+    class Meta:
+        verbose_name = "Estación Pluviométrica"
+        verbose_name_plural = "Estaciones"
 
 
 class PrecipitationRecord(models.Model):
-    station = models.ForeignKey(Station, on_delete=models.CASCADE, related_name='precipitations')
-    year = models.IntegerField()
-    month = models.IntegerField()
-    precipitation = models.FloatField()  # Datos de CHIRPS o medidos
-    effective_precipitation = models.FloatField(null=True, blank=True)  # Resultado fórmula USDA S.C.
+    SOURCE_CHOICES = [
+        ('MANUAL', 'Pluviómetro Manual'),
+        ('CHIRPS', 'Satélite CHIRPS'),
+        ('NASA', 'NASA POWER'),
+    ]
+
+    station = models.ForeignKey(Station, on_delete=models.CASCADE, related_name='records')
+    
+    date = models.DateField(verbose_name="Fecha de Registro", db_index=True)
+    
+    # Datos en milímetros
+    precipitation_mm = models.FloatField(
+        verbose_name="Precipitación Total (mm)",
+        validators=[MinValueValidator(0.0)],
+        help_text="Lluvia bruta medida"
+    )
+    
+    # Campo calculado (USDA)
+    effective_precipitation_mm = models.FloatField(
+        verbose_name="Precipitación Efectiva (mm)",
+        null=True, blank=True,
+        help_text="Agua realmente aprovechable por la raíz"
+    )
+    
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='MANUAL')
+    created_at = models.DateTimeField(auto_now_add=True) # Auditoría
 
     class Meta:
-        unique_together = ('station', 'year', 'month')
-        ordering = ['year', 'month']
+        # Evita duplicados para la misma estación en el mismo día
+        unique_together = ('station', 'date')
+        ordering = ['-date']
+        verbose_name = "Registro de Lluvia"
 
     def __str__(self):
-        return f"Precipitación {self.month}/{self.year} - {self.station.name}"
+        return f"{self.date} - {self.precipitation_mm}mm ({self.station.name})"
+
+    # Calculamos el valor efectivo automáticamente antes de guardar.
+    def save(self, *args, **kwargs):
+        if self.precipitation_mm is not None:
+            # Fórmula USDA Soil Conservation Service (Simplificada para operación diaria)
+            # P_eff = P_total * factor (usualmente 0.75 a 0.8 para lluvias moderadas)
+            # O la fórmula compleja: P_eff = P_tot * (125 - 0.2 * P_tot) / 125 (para P < 250mm/mes)
+            
+            # Usaremos la regla operativa del 75% que definimos en la vista anterior,
+            # pero guardada en base de datos para consistencia.
+            self.effective_precipitation_mm = round(self.precipitation_mm * 0.75, 2)
+            
+        super().save(*args, **kwargs)

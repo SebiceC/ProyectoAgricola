@@ -12,7 +12,7 @@ import SoilManager from './pages/SoilManager';
 import MyCrops from './pages/MyCrops'; 
 import ClimateEto from './pages/ClimateEto';
 import IrrigationProgramming from './pages/IrrigationProgramming';
-
+import PrecipitationManager from './pages/PrecipitationManager';
 
 // Protección de Rutas
 const PrivateRoute = ({ children }) => {
@@ -47,7 +47,7 @@ function App() {
             
             {/* Placeholders para futuras implementaciones */}
             <Route path="clima" element={<ClimateEto />} />
-            <Route path="lluvia" element={<div>Próximamente: Lluvias</div>} />
+            <Route path="lluvia" element={< PrecipitationManager />} />
             <Route path="riego" element={<IrrigationProgramming />} />
           </Route>
 

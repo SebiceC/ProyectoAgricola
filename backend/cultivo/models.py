@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from datetime import date
 
 class Crop(models.Model):
     # SEGURIDAD: Null=True permite cultivos "del sistema" (FAO) visibles para todos
@@ -54,3 +55,26 @@ class CropToPlant(models.Model):
     
     def __str__(self):
         return f"{self.crop.nombre} - {self.fecha_siembra}"
+
+class IrrigationExecution(models.Model):
+    """
+    Log de Auditoría: Registra cada evento de riego ejecutado.
+    Permite trazar el historial hídrico y calcular costos futuros.
+    """
+    planting = models.ForeignKey(CropToPlant, on_delete=models.CASCADE, related_name='irrigations')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    
+    date = models.DateField(default=date.today, verbose_name="Fecha de Aplicación")
+    water_volume_mm = models.FloatField(verbose_name="Lámina Aplicada (mm)")
+    
+    # Metadatos para auditoría
+    timestamp = models.DateTimeField(auto_now_add=True, verbose_name="Hora de Registro")
+    was_suggested = models.BooleanField(default=True, help_text="¿Siguió la recomendación del sistema?")
+    
+    class Meta:
+        ordering = ['-date', '-timestamp']
+        verbose_name = "Ejecución de Riego"
+        verbose_name_plural = "Historial de Riegos"
+
+    def __str__(self):
+        return f"{self.date} - {self.water_volume_mm}mm en {self.planting}"

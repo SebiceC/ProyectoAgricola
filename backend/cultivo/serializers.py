@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Crop, CropToPlant
+from .models import Crop, CropToPlant, IrrigationExecution
 from suelo.models import Soil
 
 
@@ -101,3 +101,10 @@ class CropToPlantSerializer(serializers.ModelSerializer):
             from suelo.serializers import SoilSerializer 
             response['soil'] = SoilSerializer(instance.soil).data
         return response
+
+
+class IrrigationExecutionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IrrigationExecution
+        fields = ['id', 'planting', 'date', 'water_volume_mm', 'timestamp', 'was_suggested']
+        read_only_fields = ['user', 'timestamp']
