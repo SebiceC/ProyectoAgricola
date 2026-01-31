@@ -13,11 +13,18 @@ import MyCrops from './pages/MyCrops';
 import ClimateEto from './pages/ClimateEto';
 import IrrigationProgramming from './pages/IrrigationProgramming';
 import PrecipitationManager from './pages/PrecipitationManager';
+import Settings from './pages/Settings';
+import ForgotPassword from './pages/ForgotPassword'; 
+import ResetPassword from './pages/ResetPassword';
+import Profile from './pages/Profile';
+
+// components
+import SessionExpiredModal from './components/SessionExpiredModal';
 
 // Protección de Rutas
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div>Cargando...</div>; // Evita parpadeos
+  if (loading) return <div>Cargando...</div>; 
   return user ? children : <Navigate to="/login" />;
 };
 
@@ -26,10 +33,20 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="top-right" />
+        
+        {/* 🟢 CORRECCIÓN 1: Agregar el Modal aquí para que exista en la app */}
+        <SessionExpiredModal />
+
         <Routes>
           {/* Rutas Públicas */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* 🟢 NUEVAS RUTAS DE RECUPERACIÓN */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          
+          {/* Esta es la ruta a la que llegará el link del correo */}
+          <Route path="/password/reset/confirm/:uid/:token" element={<ResetPassword />} />
           
           {/* RUTAS PROTEGIDAS (Layout Principal) */}
           <Route path="/home" element={
@@ -44,16 +61,20 @@ function App() {
             <Route path="mis-cultivos" element={<MyCrops />} />
             <Route path="nuevo-cultivo" element={<NewPlanting />} />
             <Route path="suelos" element={<SoilManager />} />
-            
-            {/* Placeholders para futuras implementaciones */}
             <Route path="clima" element={<ClimateEto />} />
-            <Route path="lluvia" element={< PrecipitationManager />} />
+            <Route path="lluvia" element={<PrecipitationManager />} />
             <Route path="riego" element={<IrrigationProgramming />} />
+            <Route path="mi-perfil" element={<Profile />} />
+            {/* 🟢 CORRECCIÓN 2: Registrar la ruta de Configuración */}
+            
+            <Route path="settings" element={<Settings />} />
+
           </Route>
 
           {/* Redirecciones por defecto */}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/home" replace />} /> {/* Retro-compatibilidad */}
+          
+          {/* Catch-all: Si la ruta no existe, manda al login */}
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </BrowserRouter>

@@ -1,17 +1,20 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
+from datetime import datetime, timedelta
 
 from .models import Station, PrecipitationRecord
 from .serializers import StationSerializer, PrecipitationRecordSerializer
+from .services import obtener_y_guardar_precipitacion_diaria_rango
 
 # ------------------------------------------------------------------
 # VISTAS DE ESTACIONES (Infraestructura)
 # ------------------------------------------------------------------
 
-class StationListCreateView(generics.ListCreateAPIView):
+class StationViewSet(viewsets.ModelViewSet):
     """
-    Lista las estaciones del usuario o crea una nueva.
+    Maneja el CRUD de estaciones y la sincronización con satélites.
     """
     serializer_class = StationSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -24,15 +27,47 @@ class StationListCreateView(generics.ListCreateAPIView):
         # Asigna automáticamente el usuario dueño
         serializer.save(user=self.request.user)
 
-class StationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    Ver, Editar o Eliminar una estación específica.
-    """
-    serializer_class = StationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    # 🚀 ACCIÓN NUEVA: Descargar datos satelitales CHIRPS
+    @action(detail=True, methods=['post'])
+    def fetch_chirps(self, request, pk=None):
+        station = self.get_object()
+        
+        # Por defecto bajamos los últimos 30 días si no envían fechas en el body
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=30)
+        
+        # Opcional: permitir rango custom desde el body (JSON)
+        if 'start_date' in request.data:
+            try:
+                start_date = datetime.strptime(request.data['start_date'], '%Y-%m-%d').date()
+            except ValueError:
+                return Response({"error": "Formato start_date inválido (YYYY-MM-DD)"}, status=400)
+                
+        if 'end_date' in request.data:
+            try:
+                end_date = datetime.strptime(request.data['end_date'], '%Y-%m-%d').date()
+            except ValueError:
+                return Response({"error": "Formato end_date inválido (YYYY-MM-DD)"}, status=400)
 
-    def get_queryset(self):
-        return Station.objects.filter(user=self.request.user)
+        try:
+            # Llamada a Google Earth Engine (Servicio)
+            resultados = obtener_y_guardar_precipitacion_diaria_rango(
+                station=station,
+                lat=station.latitude,
+                lon=station.longitude,
+                start_date=start_date,
+                end_date=end_date
+            )
+            return Response({
+                "message": f"Sincronización exitosa. Se procesaron {len(resultados)} días.",
+                "data": resultados
+            })
+        except Exception as e:
+            print(f"Error CHIRPS: {e}")
+            return Response(
+                {"error": "Error conectando con satélite CHIRPS. Verifica credenciales de Earth Engine o intenta más tarde."}, 
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
 # ------------------------------------------------------------------
 # VISTAS DE REGISTROS DE LLUVIA (Operación Diaria)

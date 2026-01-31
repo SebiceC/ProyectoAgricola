@@ -12,6 +12,10 @@ class Soil(models.Model):
     capacidad_campo = models.FloatField(help_text="CC (% Vol)", default=0.0)
     punto_marchitez = models.FloatField(help_text="PMP (% Vol)", default=0.0)
     densidad_aparente = models.FloatField(help_text="Da (g/cm3)", default=1.2)
+
+    # 🟢 NUEVOS CAMPOS: Ubicación Geográfica (Para el Motor Climático)
+    latitude = models.FloatField(verbose_name="Latitud", null=True, blank=True, help_text="Decimal (Ej: 2.92)")
+    longitude = models.FloatField(verbose_name="Longitud", null=True, blank=True, help_text="Decimal (Ej: -75.28)")
     
     # Propiedades adicionales para el cálculo avanzado
     tasa_max_infiltracion = models.FloatField(default=0.0, help_text="mm/hora")

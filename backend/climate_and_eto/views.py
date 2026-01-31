@@ -1,73 +1,69 @@
-from django.shortcuts import render
-from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
 from datetime import datetime
-from .services.eto_calculator import ETOCalculatorService
-import traceback
-from drf_spectacular.utils import extend_schema
-from .serializers import CalculateETORequestSerializer, CalculateETOResponseSerializer, AvailableMethodsResponseSerializer
 
+from .models import DailyWeather, IrrigationSettings
+from .serializers import DailyWeatherSerializer, IrrigationSettingsSerializer
+from .services import get_hybrid_weather
 
-@extend_schema(
-        request=CalculateETORequestSerializer,
-        responses={200: CalculateETOResponseSerializer}
-)
+class DailyWeatherViewSet(viewsets.ModelViewSet):
+    serializer_class = DailyWeatherSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-@api_view(['POST'])
-def calculate_eto_from_nasa(request):
-    """API endpoint para calcular ETO usando datos de NASA"""
-    
-    serializer = CalculateETORequestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    data = serializer.validated_data
+    def get_queryset(self):
+        return DailyWeather.objects.filter(user=self.request.user).order_by('-date')
 
-
-    calculator = ETOCalculatorService()
-    
-    try:
+    # 🟢 AGREGAR ESTO: Inyección de Usuario al Crear (POST)
+    def perform_create(self, serializer):
+        # Al guardar, le decimos: "El dueño de esto es quien hizo la petición"
+        serializer.save(user=self.request.user)
         
-        # Obtener y almacenar datos de NASA
-        daily_data = calculator.fetch_and_store_nasa_data(
-            user=request.user,
-            latitude=data['latitude'],
-            longitude=data['longitude'],
-            start_date=data['start_date'],
-            end_date=data['end_date'],
-            altitude=data['altitude']
-        )
-        print("NASA API respondio")
-        
-        eto_result = calculator.calculate_eto_from_daily_data(daily_data, data['method'])
+    @action(detail=False, methods=['get'])
+    def fetch_for_date(self, request):
+        date_str = request.query_params.get('date')
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
 
+        if not date_str or not lat:
+            return Response({"error": "Faltan parámetros date, lat, lon"}, status=400)
+
+        try:
+            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            weather = get_hybrid_weather(request.user, target_date, float(lat), float(lon))
+            serializer = self.get_serializer(weather)
+            return Response(serializer.data)
+        except ValueError:
+             return Response({"error": "Formato de fecha inválido"}, status=400)
+
+class IrrigationSettingsViewSet(viewsets.ModelViewSet):
+    serializer_class = IrrigationSettingsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return IrrigationSettings.objects.filter(user=self.request.user)
         
+    def get_object(self):
+        obj, _ = IrrigationSettings.objects.get_or_create(user=self.request.user)
+        return obj
+
+    # 🟢 AGREGAR ESTO: Inyección de Usuario al Crear (POST)
+    def perform_create(self, serializer):
+        # Al guardar, le decimos: "El dueño de esto es quien hizo la petición"
+        serializer.save(user=self.request.user)
+
+    # 🟢 NUEVO ENDPOINT: /api/climate/settings/choices/
+    @action(detail=False, methods=['get'])
+    def choices(self, request):
+        """
+        Devuelve las fórmulas disponibles definidas en el Modelo (Backend).
+        Así el Frontend no tiene que 'adivinar' o tenerlas hardcodeadas.
+        """
         return Response({
-            'success': True,
-            'eto': eto_result.eto,
-            'method': eto_result.get_method_name_display(),
-            'period': f"{data['start_date']} to {data['end_date']}",
-            'coordinates': f"({data['latitude']}, {data['longitude']})",
-            'observations': eto_result.observations
+            "eto_methods": [
+                {"value": k, "label": v} for k, v in IrrigationSettings.ETO_METHODS
+            ],
+            "rain_methods": [
+                {"value": k, "label": v} for k, v in IrrigationSettings.RAIN_METHODS
+            ]
         })
-        
-    except Exception as e:
-        print("Error en calculo de ETO:", str(e))
-        traceback.print_exc()
-        return Response({
-            'success': False,
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-
-@extend_schema(
-    responses={200: AvailableMethodsResponseSerializer}        
-)
-
-@api_view(['GET'])
-def available_methods(request):
-    """Lista métodos ETO disponibles"""
-    calculator = ETOCalculatorService()
-    return Response({
-        'methods': calculator.get_available_methods()
-    })

@@ -1,61 +1,82 @@
-import { ResponsiveContainer, ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
+import { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { 
+  ResponsiveContainer, ComposedChart, Line, Area, Bar, 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend 
+} from 'recharts';
 
-export default function IrrigationChart({ data }) {
-  if (!data || data.length === 0) return <div className="p-4 text-center text-gray-400">Sin datos históricos suficientes.</div>;
+export default function IrrigationChart({ plantingId }) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Calculamos límites para que la gráfica se vea centrada
-  const maxVal = Math.max(...data.map(d => d.field_capacity)) * 1.2;
-  const minVal = Math.min(...data.map(d => d.wilting_point)) * 0.8;
+  useEffect(() => {
+    if (plantingId) {
+        setLoading(true);
+        // Agregamos un timestamp para evitar caché agresivo del navegador
+        api.get(`/cultivo/plantings/${plantingId}/water_balance_history/?t=${new Date().getTime()}`)
+           .then(res => setData(res.data))
+           .catch(err => console.error(err))
+           .finally(() => setLoading(false));
+    }
+  }, [plantingId]);
+
+  if (loading) return <div className="w-full h-full bg-gray-50 animate-pulse rounded-xl"></div>;
+  if (!data || data.length === 0) return <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed">Sin datos históricos.</div>;
 
   return (
-    <div className="w-full h-[400px] bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-      <h3 className="text-gray-700 font-bold mb-4 flex items-center gap-2">
-        📉 Balance Hídrico del Suelo 
+    <div className="w-full h-full bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+      <h3 className="text-gray-700 font-bold mb-2 flex items-center gap-2 text-sm">
+        📉 Balance Hídrico (30 Días)
       </h3>
       
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis 
-            dataKey="date" 
-            tick={{fontSize: 10}} 
-            tickFormatter={(str) => str.slice(5)} // Muestra solo MM-DD
-          />
-          <YAxis domain={[minVal, maxVal]} label={{ value: 'Humedad (mm)', angle: -90, position: 'insideLeft' }} />
-          <Tooltip 
-            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-          />
-          <Legend />
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 10, right: 30, bottom: 0, left: -20 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            
+            <XAxis 
+              dataKey="date" 
+              tick={{fontSize: 10}} 
+              tickFormatter={(str) => str ? str.slice(5) : ''} 
+              interval="preserveStartEnd" // 🟢 IMPORTANTE: Fuerza mostrar el primer y último día
+              minTickGap={10} // Evita que se amontonen si hay muchos días
+            />
+            
+            <YAxis domain={[0, 'auto']} tick={{fontSize: 10}} />
+            
+            <Tooltip 
+              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+              labelFormatter={(label) => `Fecha: ${label}`}
+            />
+            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}/>
 
-          {/* 1. ZONA DE ESTRÉS (Rojo) - Desde PMP hasta Umbral Crítico */}
-          {/* Truco: Usamos Area apilada o referencias, aquí usaremos ReferenceArea o rellenos simples */}
-          
-          {/* Línea de Capacidad de Campo (Tanque Lleno) */}
-          <Line type="monotone" dataKey="field_capacity" stroke="#10b981" strokeWidth={2} dot={false} name="Capacidad Campo" />
-          
-          {/* Línea de Umbral Crítico (Inicio de Estrés) */}
-          <Line type="monotone" dataKey="critical_point" stroke="#f59e0b" strokeDasharray="5 5" dot={false} name="Umbral Riego" />
+            {/* Líneas de Referencia */}
+            <Line type="monotone" dataKey="field_capacity" stroke="#10b981" strokeWidth={2} dot={false} name="Cap. Campo" />
+            <Line type="monotone" dataKey="critical_point" stroke="#f59e0b" strokeDasharray="5 5" dot={false} name="Umbral Riego" />
+            <Line type="monotone" dataKey="wilting_point" stroke="#ef4444" strokeWidth={2} dot={false} name="Pto. Marchitez" />
 
-          {/* Línea de Punto de Marchitez (Muerte) */}
-          <Line type="monotone" dataKey="wilting_point" stroke="#ef4444" strokeWidth={2} dot={false} name="Punto Marchitez" />
+            {/* Área de Agua Actual */}
+            <Area 
+              type="monotone" 
+              dataKey="water_level" 
+              fill="#3b82f6" 
+              fillOpacity={0.3} 
+              stroke="#2563eb" 
+              strokeWidth={3}
+              name="Humedad Actual"
+              activeDot={{ r: 6 }}
+            />
 
-          {/* 2. NIVEL ACTUAL DE AGUA (La variable más importante) */}
-          <Area 
-            type="monotone" 
-            dataKey="water_level" 
-            fill="#3b82f6" 
-            fillOpacity={0.3} 
-            stroke="#2563eb" 
-            strokeWidth={3}
-            name="Humedad Actual"
-          />
+            {/* 🟢 BARRAS SEPARADAS (Sin stackId) */}
+            {/* La lluvia en Azul claro */}
+            <Bar dataKey="rain" barSize={8} fill="#0ea5e9" name="Lluvia" radius={[4, 4, 0, 0]} />
+            
+            {/* El riego en Verde Intenso (Separado para que no se oculten) */}
+            <Bar dataKey="irrigation" barSize={8} fill="#16a34a" name="Riego Aplicado" radius={[4, 4, 0, 0]} />
 
-          {/* 3. EVENTOS (Barras desde abajo) */}
-          <Bar dataKey="rain" barSize={10} fill="#0ea5e9" name="Lluvia" stackId="a" />
-          <Bar dataKey="irrigation" barSize={10} fill="#22c55e" name="Riego" stackId="a" />
-
-        </ComposedChart>
-      </ResponsiveContainer>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

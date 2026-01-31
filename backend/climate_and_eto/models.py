@@ -1,99 +1,86 @@
 from django.db import models
 from django.conf import settings
-from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
-# Create your models here.
-
-class DailyMetereologicalData(models.Model):
-   """Conjunto de datos meteorológicos diarios en un periodo (ej. un mes)"""
-
-   user = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,related_name="meteorological_datasets")
-   start_date = models.DateField()   # inicio del periodo (ej. 2025-09-01)
-   end_date = models.DateField()     # fin del periodo (ej. 2025-09-30)
-
-   latitude = models.FloatField()
-   longitude = models.FloatField()
-   altitude = models.FloatField()
-
-    # Todos los datos diarios se guardan como JSON
-    # Estructura recomendada: {"YYYY-MM-DD": { "temp_max": ..., "temp_min": ..., ... }}
-   daily_data = models.JSONField()
-
-   created_at = models.DateTimeField(auto_now_add=True)  # trazabilidad
-   updated_at = models.DateTimeField(auto_now=True)
-
-   class Meta:
-       unique_together = ("start_date", "end_date", "latitude", "longitude", "user")
-
-   def __str__(self):
-       return f"Datos {self.start_date} a {self.end_date} - ({self.latitude}, {self.longitude}) por {self.user}"
-
-class MetereologicalSummary(models.Model):
-    """Datos metereologicos ya promediados (mensuales u otros periodos)"""
-
-    PERIOD = [
-        ('MONTHLY', 'Monthly'),
-        ('WEEKLY', 'Weekly'),
+class DailyWeather(models.Model):
+    """
+    Modelo Operativo Diario.
+    Fuente de verdad única para el cálculo de riego.
+    Permite mezclar datos de NASA con datos manuales del usuario.
+    """
+    SOURCE_CHOICES = [
+        ('NASA', 'NASA POWER API'),
+        ('STATION', 'Estación Local / Sensor'),
+        ('MANUAL', 'Ingreso Manual'),
     ]
 
-    period_type = models.CharField(null=True, blank=True)
-    start_date = models.DateField(null=True, blank=True)
-    end_date = models.DateField(null=True, blank=True)
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
-    altitude = models.FloatField(null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="weather_records")
+    date = models.DateField(db_index=True, verbose_name="Fecha")
+    
+    # Coordenadas (Para diferenciar si el usuario tiene fincas en climas distintos)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
 
-    average_temp_max = models.FloatField(null=True, blank=True)
-    average_temp_min = models.FloatField(null=True, blank=True)
-    average_temp = models.FloatField(null=True, blank=True)
-    average_relative_humidity = models.FloatField(null=True, blank=True)
-    average_radiation_solar = models.FloatField(null=True, blank=True)
-    average_wind_speed = models.FloatField(null=True, blank=True)
-
-    data_source = models.CharField(
-        max_length=10,
-        choices=[('MANUAL','Manual'), ('API', 'API')],
-    )
-
-    raw_data = models.JSONField(blank=True, null=True)
+    # --- VARIABLES CLIMÁTICAS (Datos Crudos) ---
+    # Permitimos nulos porque a veces el sensor falla o NASA no trae todo
+    temp_max = models.FloatField(verbose_name="T Max (°C)", null=True, blank=True)
+    temp_min = models.FloatField(verbose_name="T Min (°C)", null=True, blank=True)
+    humidity_mean = models.FloatField(verbose_name="Humedad Relativa (%)", null=True, blank=True)
+    wind_speed = models.FloatField(verbose_name="Velocidad Viento (m/s)", null=True, blank=True)
+    solar_rad = models.FloatField(verbose_name="Radiación Solar (MJ/m2/d)", null=True, blank=True)
+    
+    # --- RESULTADO (Calculado o Ingresado) ---
+    eto_mm = models.FloatField(verbose_name="ETo (mm/día)", help_text="Evapotranspiración de Referencia")
+    
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='NASA')
+    is_manual_override = models.BooleanField(default=False, help_text="Si es True, la API no sobreescribirá este dato")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('start_date', 'end_date', 'latitude', 'longitude')
+        unique_together = ('user', 'date') # Un registro por día por usuario
+        ordering = ['-date']
+        verbose_name = "Clima Diario Operativo"
 
     def __str__(self):
-        return f"{self.period_type} {self.start_date} to {self.end_date}"
+        return f"{self.date} - ETo: {self.eto_mm} ({self.source})"
 
-class EtoCalculated(models.Model):
-    """Resultados de calculo de evapotransporacion de referencia (ETO)"""
+
+class IrrigationSettings(models.Model):
+    """
+    Configuraciones de Fórmulas (Estilo CROPWAT).
+    """
+    # 🟢 LISTA AMPLIADA DE FÓRMULAS
     ETO_METHODS = [
-        ("penman-monteith", "FAO Penman-Monteith"),
-        ("hargreaves", "Hargreaves-Samani (1985)"),
-        ("turc", "Turc"),
-        ("makkink", "Makkink (1957)"),
-        ("makkink-abstew", "Makkink-Abstew"),
-        ("simple-abstew", "Simple Abstew (1996)"),
-        ("priestley-taylor", "Priestley-Taylor"),
-        ("ivanov", "Ivanov (1954)"),
-        ("christiansen", "Christiansen"),
+        ("HARGREAVES", "Hargreaves-Samani (Solo Temperatura)"),
+        ("PENMAN", "Penman-Monteith (Estándar FAO / Completo)"),
+        ("TURC", "Turc (Climas Húmedos)"),
+        ("MAKKINK", "Makkink (Radiación y Temp)"),
+        ("MAKKINK_ABSTEW", "Makkink-Abstew (Calibrado)"),
+        ("PRIESTLEY", "Priestley-Taylor (Sin Viento)"),
+        ("IVANOV", "Ivanov (Humedad y Temp)"),
+        ("CHRISTIANSEN", "Christiansen (Datos Completos)"),
+    ]
+    
+    RAIN_METHODS = [
+        ('USDA', 'USDA S.C. Method (Recomendado)'),
+        ('FIXED', 'Porcentaje Fijo (Ej: 80%)'),
+        ('DEPENDABLE', 'Lluvia Confiable (FAO)'),
     ]
 
-    SOURCES = [
-        ('MANUAL', 'Manual'),
-        ('API', 'API'),
-    ]
-    method_name = models.CharField(max_length=100, blank=True, null=True, choices=ETO_METHODS)
-    data_source = models.CharField(max_length=100, blank=True, null=True, choices=SOURCES)
-    calculation_date = models.DateField(blank=True, null=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='irrigation_settings')
     
-    # Relación: puede ser con datos diarios o con resumen
-    daily_data = models.ManyToManyField(DailyMetereologicalData, blank=True)
-    summary_data = models.ForeignKey(MetereologicalSummary, on_delete=models.CASCADE, null=True, blank=True)
+    # Preferencias de Cálculo
+    preferred_eto_method = models.CharField(max_length=30, choices=ETO_METHODS, default='PENMAN')
+    effective_rain_method = models.CharField(max_length=20, choices=RAIN_METHODS, default='USDA')
     
-    eto = models.FloatField(blank=True, null=True)
-    observations = models.TextField(blank=True, null=True)
+    # Eficiencia del Sistema (Afecta el Riego Neto)
+    system_efficiency = models.FloatField(
+        default=0.90, 
+        validators=[MinValueValidator(0.1), MaxValueValidator(1.0)],
+        help_text="0.90 para Goteo, 0.75 para Aspersión, 0.60 Gravedad"
+    )
 
     def __str__(self):
-        if self.eto is not None:
-            return f"{self.get_method_name_display()} - {self.eto:.2f} mm/day"
-        return f"{self.get_method_name_display()} - No ETO calculated"    
-            
+        return f"Configuración de {self.user.username}"

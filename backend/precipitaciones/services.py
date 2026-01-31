@@ -1,103 +1,118 @@
 import ee
-import datetime
+import os
+import json
+from datetime import datetime, timedelta
+from google.oauth2.service_account import Credentials 
 from .models import PrecipitationRecord
-from datetime import timedelta
 
-# Se recomienda autoinicializar fuera de la función (pero solo una vez al levantar el servicio)
-try:
-    ee.Initialize(project='etflow')
-except Exception:
+# Ruta al archivo JSON
+KEY_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ee-key.json')
+
+def inicializar_earth_engine():
+    """
+    Autenticación robusta con Scopes explícitos.
+    """
     try:
-        ee.Authenticate()
-        ee.Initialize(project='etflow')
-    except Exception:
-        pass
-
-def obtener_precipitacion_chirps(lat, lon, year, month):
-    # Definir las fechas de inicio y fin del mes
-    start_date = datetime.date(year, month, 1)
-    if month == 12:
-        end_date = datetime.date(year + 1, 1, 1)
-    else:
-        end_date = datetime.date(year, month + 1, 1)
-    # Definir el punto de interés
-    point = ee.Geometry.Point([float(lon), float(lat)])
-    # Filtrar la colección CHIRPS para las fechas indicadas
-    dataset = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY').filter(
-        ee.Filter.date(str(start_date), str(end_date))
-    )
-    # Sumar la precipitación diaria para obtener el total mensual
-    total_precip_img = dataset.select('precipitation').sum()
-    # Extraer el valor para el punto dado
-    total_precip = total_precip_img.reduceRegion(
-        reducer=ee.Reducer.first(), geometry=point, scale=5000
-    ).get('precipitation').getInfo()
-    return total_precip
-
-
-
-def calcular_precipitacion_efectiva(p):
-    if p is None:
-        return None
-    if p <= 250:
-        pef = (p * (125 - 0.2 * 3 * p)) / 125
-    else:
-        pef = 125 / 3 + 0.1 * p
-    return max(pef, 0)
-
-def actualizar_precipitacion(estacion, year, month):
-    p = obtener_precipitacion_chirps(estacion.latitude, estacion.longitude, year, month)
-    if p is None:
-        return None
-    pef = calcular_precipitacion_efectiva(p)
-    obj, created = PrecipitationRecord.objects.update_or_create(
-        station=estacion,
-        year=year,
-        month=month,
-        defaults={
-            'precipitation': p,
-            'effective_precipitation': pef,
-        }
-    )
-    return obj
-
-def guardar_precipitacion_diaria(station, fecha, precip_mm, pef_mm):
-    # Encuentra el año y el mes/día
-    year = fecha.year
-    month = fecha.month
-    day = fecha.day
-    # Guardar registro con día extra
-    obj, created = PrecipitationRecord.objects.update_or_create(
-        station=station,
-        year=year,
-        month=month,
-        defaults={
-            'precipitation': precip_mm,
-            'effective_precipitation': pef_mm
-        }
-    )
-    return obj
-
+        ee.Image('UCSB-CHG/CHIRPS/DAILY')
+    except:
+        try:
+            if os.path.exists(KEY_PATH):
+                print(f"🔑 Cargando credenciales GEE...")
+                SCOPES = ['https://www.googleapis.com/auth/earthengine']
+                credentials = Credentials.from_service_account_file(KEY_PATH, scopes=SCOPES)
+                ee.Initialize(credentials)
+            else:
+                print("⚠️ No se encontró ee-key.json")
+                ee.Initialize()
+        except Exception as e:
+            print(f"❌ Error Auth GEE: {e}")
+            raise Exception(f"Fallo de Autenticación GEE: {e}")
 
 def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, end_date):
-    point = ee.Geometry.Point([float(lon), float(lat)])
-    dataset = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY').filter(
-        ee.Filter.date(str(start_date), str(end_date + timedelta(days=1)))
-    )
-    imagenes = dataset.toList(dataset.size())
+    """
+    Descarga datos de CHIRPS validando geometría.
+    """
+    # 1. Validación de Datos de Entrada (DEBUG)
+    print(f"📍 Validando coordenadas para estación '{station.name}': Lat={lat}, Lon={lon}")
+
+    try:
+        # Convertir a float y validar rangos terrestres
+        f_lat = float(lat)
+        f_lon = float(lon)
+        
+        if not (-90 <= f_lat <= 90):
+            raise ValueError(f"Latitud inválida ({f_lat}). Debe estar entre -90 y 90.")
+        if not (-180 <= f_lon <= 180):
+            raise ValueError(f"Longitud inválida ({f_lon}). Debe estar entre -180 y 180.")
+
+    except (ValueError, TypeError):
+        raise Exception(f"Coordenadas corruptas en la estación: Lat: {lat}, Lon: {lon}")
+
+    # 2. Inicializar Conexión
+    inicializar_earth_engine()
+    
+    # 3. Definir Fechas y Geometría
+    # ⚠️ IMPORTANTE: Earth Engine usa [LONGITUD, LATITUD] (X, Y)
+    punto = ee.Geometry.Point([f_lon, f_lat])
+    
+    ee_start = start_date.strftime('%Y-%m-%d')
+    ee_end = end_date.strftime('%Y-%m-%d')
+    
+    print(f"🛰️ Consultando CHIRPS ({ee_start} a {ee_end})...")
+
+    # 4. Colección CHIRPS
+    chirps = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY') \
+        .filterDate(ee_start, ee_end) \
+        .filterBounds(punto)
+
+    # 5. Reducer (Extraer datos)
+    def extraer_dato(img):
+        date = img.date().format('YYYY-MM-dd')
+        value = img.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=punto,
+            scale=5000 
+        ).get('precipitation')
+        # Manejo de nulos en la nube
+        return ee.Feature(None, {'date': date, 'precipitation': value})
+
+    # Ejecutar en Google
+    try:
+        data = chirps.map(extraer_dato).getInfo()
+    except Exception as e:
+        raise Exception(f"Error interno de Earth Engine al procesar geometría: {e}")
+
+    # 6. Guardar en BD
     resultados = []
-    for i in range(imagenes.size().getInfo()):
-        imagen = ee.Image(imagenes.get(i))
-        fecha_ee = ee.Date(imagen.get('system:time_start'))
-        fecha = fecha_ee.format('YYYY-MM-dd').getInfo()
-        valor = imagen.reduceRegion(
-            reducer=ee.Reducer.first(), geometry=point, scale=5000
-        ).get('precipitation').getInfo()
-        if valor is not None:
-            pef = calcular_precipitacion_efectiva(valor)
-            # Guardar en DB
-            guardar_precipitacion_diaria(station, datetime.date.fromisoformat(fecha), valor, pef)
-        else:
-            pef = None
-        resultados.append({'date': fecha, 'precipitation': valor, 'effective_precipitation': pef})
+    registros_creados = 0
+
+    if 'features' in data:
+        for feature in data['features']:
+            props = feature['properties']
+            fecha_str = props['date']
+            precip_mm = props['precipitation']
+
+            if precip_mm is None or precip_mm < 0:
+                precip_mm = 0.0
+            
+            valor_final = round(float(precip_mm), 2)
+            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+
+            obj, created = PrecipitationRecord.objects.update_or_create(
+                station=station,
+                date=fecha_obj,
+                defaults={
+                    'precipitation_mm': valor_final,          # <--- FALTABA ESTE CAMPO OBLIGATORIO
+                    'effective_precipitation_mm': valor_final,
+                    'source': 'SATELLITE'
+                }
+            )
+            
+            resultados.append({
+                "date": fecha_str,
+                "mm": round(float(precip_mm), 2)
+            })
+            if created: registros_creados += 1
+
+    print(f"✅ Sincronización exitosa: {registros_creados} nuevos registros.")
     return resultados

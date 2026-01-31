@@ -115,3 +115,8 @@ venv/
 env/
 *.pyc
 __pycache__/
+
+# Credenciales de Google Cloud y secretos
+backend/ee-key.json
+frontend/.env
+backend/.env

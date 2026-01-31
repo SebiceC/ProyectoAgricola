@@ -11,19 +11,17 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Token ${token}`;
-    console.log("🔵 Token enviado:", config.headers.Authorization); 
   }
   return config;
-}, (error) => {
-  return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
        localStorage.removeItem('access_token');
-       window.location.href = '/login';
+      
+       window.dispatchEvent(new CustomEvent('auth:session-expired'));
     }
     return Promise.reject(error);
   }

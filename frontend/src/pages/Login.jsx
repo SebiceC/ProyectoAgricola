@@ -6,7 +6,7 @@ import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // Estado para el "ojo"
+  const [showPassword, setShowPassword] = useState(false); 
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -50,7 +50,7 @@ export default function Login() {
             <div className="relative">
               <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
               <input
-                type={showPassword ? "text" : "password"} // Cambio dinámico de tipo
+                type={showPassword ? "text" : "password"} 
                 required
                 className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-agri-green focus:border-transparent outline-none transition-all"
                 placeholder="••••••••"
@@ -65,6 +65,16 @@ export default function Login() {
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
+          </div>
+
+          {/* 🟢 NUEVO: ENLACE RECUPERAR CONTRASEÑA */}
+          <div className="flex justify-end">
+            <Link 
+              to="/forgot-password" 
+              className="text-sm text-agri-green hover:text-agri-dark font-medium transition-colors"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
           </div>
 
           <button

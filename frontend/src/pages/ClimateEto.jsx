@@ -1,263 +1,252 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { toast } from 'react-hot-toast';
-import { CloudSun, MapPin, Calendar, Activity, ArrowRight, Info } from 'lucide-react';
+import { 
+  CloudSun, Thermometer, Wind, Droplets, Calendar, 
+  Save, RefreshCw, MapPin, CheckCircle, Info 
+} from 'lucide-react';
 
 export default function ClimateEto() {
-  // Estado para los métodos (fórmulas) disponibles
-  const [methods, setMethods] = useState([]);
-  const [loadingMethods, setLoadingMethods] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   
-  // Estado del resultado
-  const [result, setResult] = useState(null);
-  const [calculating, setCalculating] = useState(false);
+  // LÓGICA DE FECHAS: Restamos 2 días para asegurar datos NASA disponibles
+  const getMaxDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 2); 
+    return d.toISOString().split('T')[0];
+  };
+  const [selectedDate, setSelectedDate] = useState(getMaxDate());
 
-  // Formulario
-  const [formData, setFormData] = useState({
-    latitude: '',
-    longitude: '',
-    altitude: 0,
-    start_date: '',
-    end_date: '',
-    method: '' // Se llenará con el primero disponible
+  // Estado del Clima (Lat/Lon por defecto de Neiva, pero editables)
+  const [weatherData, setWeatherData] = useState({
+    id: null,
+    temp_max: '',
+    temp_min: '',
+    humidity_mean: '',
+    wind_speed: '',
+    solar_rad: '',
+    eto_mm: '',
+    source: '',
+    latitude: 2.92, 
+    longitude: -75.28
   });
 
-  // 1. Cargar métodos disponibles al iniciar
   useEffect(() => {
-    const fetchMethods = async () => {
-      try {
-        // Consultamos al backend qué fórmulas soporta
-        const res = await api.get('/available-methods/');
-        console.log("📦 MÉTODOS RECIBIDOS:", res.data); // <--- Agrega esto
-        // console.log("Tipo de dato:", typeof res.data.methods[0]);
-        const methodList = res.data.methods; // Guardamos la lista
-        
-        setMethods(res.data.methods);
-        
-        if (methodList.length > 0) {
-            // Buscamos si existe Penman, si no, usamos el primero de la lista
-            const defaultMethod = methodList.find(m => m.key === 'penman-monteith') 
-                ? 'penman-monteith' 
-                : methodList[0].key;
+    fetchWeatherData();
+  }, [selectedDate]); // Al cambiar fecha, recarga automático
 
-            setFormData(prev => ({
-                ...prev,
-                method: defaultMethod
-            }));
-        }
-      } catch (error) {
-        console.error(error);
-        toast.error('No se pudieron cargar los métodos de cálculo');
-      } finally {
-        setLoadingMethods(false);
-      }
-    };
-    fetchMethods();
-  }, []);
-
-  // 2. Manejar el cálculo
-  const handleCalculate = async (e) => {
-    e.preventDefault();
-    setCalculating(true);
-    setResult(null); // Limpiar resultado anterior
-
+  const fetchWeatherData = async () => {
+    setLoading(true);
     try {
-      // Endpoint que conecta con NASA POWER
-      const response = await api.post('/calculate-eto/', {
-        latitude: parseFloat(formData.latitude),
-        longitude: parseFloat(formData.longitude),
-        altitude: parseFloat(formData.altitude),
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        method: formData.method
+      // Enviamos las coordenadas actuales del formulario para pedir el clima de ESA zona
+      const res = await api.get(`/weather/fetch_for_date/`, {
+        params: {
+          date: selectedDate,
+          lat: weatherData.latitude,
+          lon: weatherData.longitude
+        }
       });
+      
+      setWeatherData(prev => ({
+        ...prev,
+        ...res.data,
+        // 🛡️ PROTECCIÓN CRÍTICA: Si el backend devuelve null (error NASA), mantenemos lo que escribió el usuario
+        latitude: res.data.latitude || prev.latitude,
+        longitude: res.data.longitude || prev.longitude,
+        // Evitar nulos en inputs numéricos
+        temp_max: res.data.temp_max ?? '',
+        temp_min: res.data.temp_min ?? '',
+        eto_mm: res.data.eto_mm ?? ''
+      }));
 
-      if (response.data.success) {
-        setResult(response.data);
-        toast.success(`ETo calculada con ${formData.method}`);
-      } else {
-        toast.error('La API respondió pero sin éxito.');
-      }
     } catch (error) {
       console.error(error);
-      const msg = error.response?.data?.error || 'Error conectando con el servicio climático';
-      toast.error(msg);
+      toast.error("No se pudieron obtener datos para esta fecha/ubicación.");
     } finally {
-      setCalculating(false);
+      setLoading(false);
     }
   };
 
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+        const payload = {
+            ...weatherData,
+            source: 'MANUAL',
+            date: selectedDate
+        };
+
+        if (weatherData.id) {
+            await api.patch(`/weather/${weatherData.id}/`, payload);
+        } else {
+            await api.post(`/weather/`, payload);
+        }
+        
+        toast.success("Datos corregidos y guardados.");
+        fetchWeatherData(); 
+
+    } catch (error) {
+        console.error(error);
+        toast.error("Error al guardar corrección.");
+    } finally {
+        setSaving(false);
+    }
+  };
+
+  const isManual = weatherData.source === 'MANUAL' || weatherData.source === 'STATION';
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-agri-dark flex items-center gap-2">
-          <CloudSun size={32} className="text-blue-500" />
-          Cálculo de Evapotranspiración (ETo)
-        </h1>
-        <p className="text-gray-500">
-          Conexión satelital con NASA POWER para estimar la demanda hídrica.
-        </p>
+    <div className="max-w-5xl mx-auto px-4 pb-12">
+      
+      <div className="mb-8 border-b pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-agri-dark flex items-center gap-3">
+            <CloudSun className="text-orange-500" size={36} />
+            Monitor Climático (ETo)
+          </h1>
+          <p className="text-gray-500 mt-2 text-lg">
+            Consulta y calibra los datos meteorológicos.
+          </p>
+        </div>
+        
+        <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
+            <Calendar size={20} className="text-gray-400" />
+            <input 
+                type="date" 
+                value={selectedDate}
+                max={getMaxDate()} 
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="outline-none text-gray-700 font-medium cursor-pointer"
+            />
+            </div>
+            <p className="text-[10px] text-orange-500 flex items-center gap-1 font-medium">
+                <Info size={10} /> Datos satelitales disponibles hasta hace 48h
+            </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* COLUMNA IZQUIERDA: FORMULARIO */}
-        <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-fit">
-          <form onSubmit={handleCalculate} className="space-y-5">
-            
-            {/* UBICACIÓN */}
-            <div>
-              <label className="text-sm font-bold text-gray-700 flex items-center gap-1 mb-2">
-                <MapPin size={16} /> Ubicación
-              </label>
-              <div className="grid grid-cols-2 gap-2">
+        {/* COLUMNA IZQ: CONTROL DE UBICACIÓN */}
+        <div className="lg:col-span-1 space-y-6">
+          
+          {/* Tarjeta de Estado */}
+          <div className={`p-6 rounded-2xl border-2 ${isManual ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-2">Fuente de Datos</h3>
+            <div className="flex items-center gap-3">
+                {isManual ? <CheckCircle className="text-green-600" size={32}/> : <CloudSun className="text-blue-600" size={32}/>}
                 <div>
-                  <input
-                    type="number" step="0.0001" placeholder="Latitud"
-                    className="w-full p-2 border rounded text-sm"
-                    value={formData.latitude}
-                    onChange={e => setFormData({...formData, latitude: e.target.value})}
-                    required
-                  />
+                    <span className={`text-xl font-bold ${isManual ? 'text-green-800' : 'text-blue-800'}`}>
+                        {isManual ? 'Datos Manuales' : 'Satelital (NASA)'}
+                    </span>
+                    <p className="text-xs text-gray-500 mt-1">
+                        {isManual ? 'Validado por usuario.' : 'Estimación remota.'}
+                    </p>
+                </div>
+            </div>
+          </div>
+
+          {/* Tarjeta de Ubicación Editable */}
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+            <h4 className="font-bold text-gray-700 flex items-center gap-2 mb-4">
+                <MapPin size={18} /> Coordenadas de Cálculo
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="text-xs text-gray-400 block mb-1">Latitud</label>
+                    <input 
+                        type="number" 
+                        step="0.0001"
+                        value={weatherData.latitude}
+                        onChange={(e) => setWeatherData({...weatherData, latitude: parseFloat(e.target.value)})}
+                        className="w-full bg-white border border-gray-300 p-2 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
                 </div>
                 <div>
-                  <input
-                    type="number" step="0.0001" placeholder="Longitud"
-                    className="w-full p-2 border rounded text-sm"
-                    value={formData.longitude}
-                    onChange={e => setFormData({...formData, longitude: e.target.value})}
-                    required
-                  />
+                    <label className="text-xs text-gray-400 block mb-1">Longitud</label>
+                    <input 
+                        type="number" 
+                        step="0.0001"
+                        value={weatherData.longitude}
+                        onChange={(e) => setWeatherData({...weatherData, longitude: parseFloat(e.target.value)})}
+                        className="w-full bg-white border border-gray-300 p-2 rounded text-sm focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
                 </div>
-              </div>
-              <div className="mt-2">
-                <input
-                    type="number" step="1" placeholder="Altitud (msnm)"
-                    className="w-full p-2 border rounded text-sm"
-                    value={formData.altitude}
-                    onChange={e => setFormData({...formData, altitude: e.target.value})}
-                  />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Ej: Neiva (Lat: 2.92, Lon: -75.28)</p>
             </div>
-
-            {/* FECHAS */}
-            <div>
-                <label className="text-sm font-bold text-gray-700 flex items-center gap-1 mb-2">
-                    <Calendar size={16} /> Periodo de Análisis
-                </label>
-                
-                <div className="grid grid-cols-2 gap-4">
-                    {/* FECHA INICIAL */}
-                    <div>
-                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Fecha Inicial</label>
-                        <input
-                            type="date"
-                            className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={formData.start_date}
-                            onChange={e => setFormData({...formData, start_date: e.target.value})}
-                            required
-                        />
-                    </div>
-
-                    {/* FECHA FINAL */}
-                    <div>
-                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Fecha Final</label>
-                        <input
-                            type="date"
-                            className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={formData.end_date}
-                            onChange={e => setFormData({...formData, end_date: e.target.value})}
-                            required
-                        />
-                    </div>
-                </div>
-                
-                <p className="text-xs text-blue-400 mt-2 bg-blue-50 p-2 rounded">
-                    ℹ️ <strong>Nota:</strong> Usa fechas con al menos 1 mes de antigüedad para asegurar datos satelitales completos.
-                </p>
-            </div>
-
-            {/* MÉTODO (Dinámico del Backend) */}
-            <div>
-              <label className="text-sm font-bold text-gray-700 flex items-center gap-1 mb-2">
-                <Activity size={16} /> Fórmula Matemática
-              </label>
-              {loadingMethods ? (
-                <div className="text-xs text-gray-500 animate-pulse">Cargando fórmulas...</div>
-              ) : (
-                <select
-                    className="w-full p-2 border rounded text-sm bg-white"
-                    value={formData.method}
-                    onChange={e => setFormData({...formData, method: e.target.value})}
-                >
-                    {methods.map((m) => (
-                        <option key={m.key} value={m.key}>
-                            {m.name} 
-                        </option>
-                    ))}
-                </select>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={calculating}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors flex justify-center items-center gap-2"
+            <button 
+                onClick={fetchWeatherData}
+                className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
             >
-              {calculating ? 'Consultando NASA...' : <>Calcular <ArrowRight size={16} /></>}
+                <RefreshCw size={14}/> Recalcular para esta zona
             </button>
-          </form>
+          </div>
         </div>
 
-        {/* COLUMNA DERECHA: RESULTADOS */}
-        <div className="lg:col-span-2">
-          {result ? (
-            <div className="bg-white rounded-xl shadow-lg border border-blue-100 overflow-hidden">
-              <div className="bg-blue-50 p-4 border-b border-blue-100 flex justify-between items-center">
-                <h3 className="font-bold text-blue-800">Reporte de ETo Diaria</h3>
-                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full uppercase font-bold">
-                  {result.method}
-                </span>
-              </div>
-              
-              <div className="p-8 text-center">
-                <p className="text-gray-500 mb-2">Evapotranspiración de Referencia Promedio</p>
-                <div className="text-6xl font-extrabold text-agri-dark mb-2">
-                  {result.eto.toFixed(2)} <span className="text-2xl text-gray-400 font-normal">mm/día</span>
+        {/* COLUMNA DER: FORMULARIO */}
+        <form onSubmit={handleSave} className="lg:col-span-2 bg-white p-8 rounded-2xl shadow-lg border border-gray-100 relative overflow-hidden">
+            {loading && (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex justify-center items-center">
+                    <div className="animate-spin text-agri-green"><RefreshCw size={32}/></div>
                 </div>
-                <div className="flex justify-center gap-4 text-sm text-gray-500 mt-6 bg-gray-50 p-4 rounded-lg inline-flex">
-                   <div>
-                      <span className="block font-bold text-gray-700">Periodo</span>
-                      {result.period}
-                   </div>
-                   <div className="border-l border-gray-300 mx-2"></div>
-                   <div>
-                      <span className="block font-bold text-gray-700">Coordenadas</span>
-                      {result.coordinates}
-                   </div>
+            )}
+
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800">Variables Atmosféricas</h3>
+                <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1 rounded-full">ID: {weatherData.id || 'Nuevo'}</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                        <Thermometer size={16} className="text-red-500"/> Temp. Máxima (°C)
+                    </label>
+                    <input 
+                        type="number" step="0.1" 
+                        value={weatherData.temp_max} 
+                        onChange={(e) => setWeatherData({...weatherData, temp_max: e.target.value})} 
+                        className="w-full p-3 border rounded-lg font-mono text-lg outline-none focus:border-agri-green" 
+                    />
                 </div>
-
-                {result.observations && (
-                  <div className="mt-6 text-left bg-yellow-50 p-4 rounded border border-yellow-100 flex gap-2">
-                    <Info className="text-yellow-600 flex-shrink-0" size={20}/>
-                    <p className="text-sm text-yellow-800">{result.observations}</p>
-                  </div>
-                )}
-              </div>
+                <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                        <Thermometer size={16} className="text-blue-500"/> Temp. Mínima (°C)
+                    </label>
+                    <input 
+                        type="number" step="0.1" 
+                        value={weatherData.temp_min} 
+                        onChange={(e) => setWeatherData({...weatherData, temp_min: e.target.value})} 
+                        className="w-full p-3 border rounded-lg font-mono text-lg outline-none focus:border-agri-green" 
+                    />
+                </div>
+                <div className="md:col-span-2 bg-orange-50 p-4 rounded-xl border border-orange-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Droplets size={24} /></div>
+                        <div>
+                            <label className="text-sm font-bold text-orange-800 block">ETo Calculada (mm/día)</label>
+                            <span className="text-xs text-orange-600">Evapotranspiración de Referencia</span>
+                        </div>
+                    </div>
+                    <div className="relative">
+                        <input 
+                            type="number" step="0.01" 
+                            value={weatherData.eto_mm} 
+                            onChange={(e) => setWeatherData({...weatherData, eto_mm: e.target.value})} 
+                            className="w-32 text-right p-2 border border-orange-300 rounded bg-white font-bold text-2xl text-gray-800 outline-none focus:ring-2 focus:ring-orange-200" 
+                        />
+                        <span className="absolute right-[-25px] top-4 text-gray-400 text-xs">mm</span>
+                    </div>
+                </div>
             </div>
-          ) : (
-            // ESTADO VACÍO (Placeholder)
-            <div className="h-full flex flex-col items-center justify-center bg-gray-50 rounded-xl border border-dashed border-gray-300 p-10 text-gray-400">
-              <CloudSun size={64} className="mb-4 opacity-20" />
-              <p className="text-lg font-medium">Esperando datos...</p>
-              <p className="text-sm text-center max-w-xs mt-2">
-                Selecciona una ubicación y un rango de fechas para descargar datos meteorológicos.
-              </p>
-            </div>
-          )}
-        </div>
 
+            <div className="border-t pt-6 flex justify-end gap-3">
+                <button type="submit" disabled={saving} className="px-6 py-3 bg-agri-dark hover:bg-slate-800 text-white font-bold rounded-lg shadow-md flex items-center gap-2 transition-all">
+                    {saving ? 'Guardando...' : <><Save size={20} /> Guardar Corrección</>}
+                </button>
+            </div>
+        </form>
       </div>
     </div>
   );
