@@ -120,3 +120,4 @@ __pycache__/
 backend/ee-key.json
 frontend/.env
 backend/.env
+.env
