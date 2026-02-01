@@ -11,6 +11,7 @@ class DailyWeather(models.Model):
     """
     SOURCE_CHOICES = [
         ('NASA', 'NASA POWER API'),
+        ('SATELLITE', 'Satelital (NASA)'),
         ('STATION', 'Estación Local / Sensor'),
         ('MANUAL', 'Ingreso Manual'),
     ]

@@ -57,16 +57,30 @@ export default function ClimateEto() {
 
   // 🟢 2. Cargar Opciones del Backend al iniciar
   useEffect(() => {
-    const loadOptions = async () => {
+    const loadSettings = async () => {
         try {
-            const res = await api.get('/settings/choices/');
-            // res.data.eto_methods es un array [{value: 'PENMAN', label: 'Penman...'}, ...]
-            setAvailableMethods(res.data.eto_methods);
+            // Hacemos ambas peticiones en paralelo
+            const [choicesRes, settingsRes] = await Promise.all([
+                api.get('/settings/choices/'),
+                api.get('/settings/')
+            ]);
+            
+            // 1. Llenamos el select
+            setAvailableMethods(choicesRes.data.eto_methods);
+
+            // 2. Si el usuario tiene una configuración guardada, la aplicamos como default
+            if (settingsRes.data && settingsRes.data.length > 0) {
+                const userPref = settingsRes.data[0].preferred_eto_method;
+                setWeatherData(prev => ({
+                    ...prev,
+                    method_used: userPref // ¡Esto arregla que siempre salga Penman!
+                }));
+            }
         } catch (error) {
-            console.error("Error cargando fórmulas", error);
+            console.error("Error cargando configuración inicial", error);
         }
     };
-    loadOptions();
+    loadSettings();
   }, []);
 
   useEffect(() => { loadExistingData(); }, [selectedDate]);
@@ -82,7 +96,19 @@ export default function ClimateEto() {
             }
         });
         if (res.data.id || res.data.eto_mm) {
-            setWeatherData(prev => ({ ...prev, ...res.data }));
+            setWeatherData(prev => ({
+                ...prev,
+                ...res.data,
+                // 🟢 MAPEO CRÍTICO: Backend (humidity_mean) -> Frontend (humidity)
+                humidity: res.data.humidity_mean ?? res.data.humidity ?? '', 
+                // Asegurar otros campos
+                temp_max: res.data.temp_max ?? '',
+                temp_min: res.data.temp_min ?? '',
+                wind_speed: res.data.wind_speed ?? '',
+                solar_rad: res.data.solar_rad ?? '',
+                eto_mm: res.data.eto_mm ?? '',
+                method_used: res.data.method_used || prev.method_used || 'PENMAN'
+            }));
             setMode(res.data.source === 'MANUAL' ? 'MANUAL' : 'SATELLITE');
         } else {
             resetValues();
@@ -108,7 +134,7 @@ export default function ClimateEto() {
             method: weatherData.method_used 
         });
         
-        setWeatherData(prev => ({ ...prev, ...res.data, source: 'SATELLITE' }));
+        setWeatherData(prev => ({ ...prev, ...res.data, humidity: res.data.humidity_mean ?? res.data.humidity ?? '', source: 'SATELLITE' }));
         toast.success(`Datos NASA obtenidos. ETo: ${res.data.eto_mm} mm`);
     } catch (error) {
         toast.error("Error conectando con NASA POWER.");
@@ -120,31 +146,52 @@ export default function ClimateEto() {
   const handleManualCalculate = async () => {
       setCalculating(true);
       try {
-          const res = await api.post('/weather/preview/', {
+          // 🟢 USAMOS cleanPayload AQUÍ TAMBIÉN
+          const rawData = {
               ...weatherData,
               method: weatherData.method_used,
               date: inputToApiFormat(selectedDate)
-          });
+          };
+          const payload = cleanPayload(rawData);
+
+          const res = await api.post('/weather/preview/', payload);
           setWeatherData(prev => ({ ...prev, eto_mm: res.data.eto }));
           toast.success(`Cálculo: ${res.data.eto} mm`);
-      } catch (error) {
-          toast.error("Error en cálculo manual.");
-      } finally {
-          setCalculating(false);
-      }
+      } catch (error) { 
+          toast.error("Error en cálculo manual."); 
+      } 
+      finally { setCalculating(false); }
   };
 
   const handleSave = async () => {
       if (!weatherData.eto_mm) return toast.error("Sin ETo para guardar");
       setSaving(true);
       try {
-          const payload = { ...weatherData, source: mode, date: inputToApiFormat(selectedDate) };
+          // 🟢 USAMOS cleanPayload AQUÍ
+          const rawData = { ...weatherData, source: mode, date: inputToApiFormat(selectedDate) };
+          const payload = cleanPayload(rawData);
+
           if (weatherData.id) await api.patch(`/weather/${weatherData.id}/`, payload);
           else await api.post(`/weather/`, payload);
+          
           toast.success("Guardado");
           loadExistingData();
-      } catch (error) { toast.error("Error guardando"); }
+      } catch (error) { 
+          console.error(error); // Para ver el error real en consola
+          toast.error("Error guardando: Revisa los datos ingresados."); 
+      } 
       finally { setSaving(false); }
+  };
+
+  // Helper para limpiar strings vacíos y convertirlos a null
+  const cleanPayload = (data) => {
+      const cleaned = { ...data };
+      ['temp_max', 'temp_min', 'humidity', 'wind_speed', 'solar_rad'].forEach(field => {
+          if (cleaned[field] === '' || cleaned[field] === undefined) {
+              cleaned[field] = null;
+          }
+      });
+      return cleaned;
   };
 
   return (

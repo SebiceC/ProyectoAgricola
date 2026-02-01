@@ -102,12 +102,15 @@ export default function IrrigationProgramming() {
   const handleSaveIrrigation = async () => {
       if (!realIrrigation || realIrrigation <= 0) return toast.error("Ingresa una cantidad válida");
       
+      const today = new Date();
+      const isoDate = today.toISOString().split('T')[0]; 
+      
       try {
           await api.post('/cultivo/executions/', {
               planting: confirmModal.plantId,
               water_volume_mm: parseFloat(realIrrigation),
               // 🟢 AJUSTE DE FECHA: Enviamos DD/MM/YYYY al backend
-              date: toStandardDate(new Date()) 
+              date: isoDate
           });
           toast.success("Riego registrado exitosamente.");
           setConfirmModal({ open: false, plantId: null, suggestedMm: 0 });

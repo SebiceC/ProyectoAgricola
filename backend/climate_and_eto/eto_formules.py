@@ -107,25 +107,34 @@ class ETOFormulas:
     @staticmethod
     def hargreaves(temp_max: float, temp_min: float, temp_avg: float, latitude: float, day_of_year: int) -> float:
         """
-        Hargreaves-Samani (1985) fórmula
-        Requiere solo temperaturas y ubicacion
+        Hargreaves-Samani (1985)
+        Unidades de salida: mm/día
         """
-
-        # Convertir latitud a radianes
+        # 1. Latitud a radianes
         lat_rad = math.radians(latitude)
 
-        # Declinacion solar
+        # 2. Declinación solar
         delta = 0.409 * math.sin(2 * math.pi * day_of_year / 365 - 1.39)
 
-        # Angulo horario de puesta del sol
-        ws = math.acos(-math.tan(lat_rad) * math.tan(delta))
+        # 3. Ángulo horario de puesta del sol
+        ws_val = -math.tan(lat_rad) * math.tan(delta)
+        # Protección matemática para zonas polares (no es tu caso, pero es buena práctica)
+        ws_val = max(-1, min(1, ws_val)) 
+        ws = math.acos(ws_val)
 
-        # Radiacion extraterrestre 
+        # 4. Distancia relativa Tierra-Sol
         dr = 1 + 0.033 * math.cos(2 * math.pi * day_of_year / 365)
-        Ra = 24 * 60 / math.pi * 0.082 * dr * (ws * math.sin(lat_rad) * math.sin(delta) + math.cos(lat_rad) * math.cos(delta) * math.sin(ws))
 
-        # Formula Hargreaves-Samani
-        eto = 0.0023 * (temp_avg + 17.8) * math.sqrt(temp_max - temp_min) * Ra
+        # 5. Radiación Extraterrestre (Ra) en MJ/m2/día
+        # Constante solar Gsc = 0.0820 MJ/m2/min
+        Ra = (24 * 60 / math.pi) * 0.0820 * dr * (
+            (ws * math.sin(lat_rad) * math.sin(delta)) + 
+            (math.cos(lat_rad) * math.cos(delta) * math.sin(ws))
+        )
+
+        # 6. Fórmula Hargreaves-Samani
+        # 🟢 CORRECCIÓN CRÍTICA: Multiplicar por 0.408 para convertir MJ a mm
+        eto = 0.0023 * (temp_avg + 17.8) * math.sqrt(temp_max - temp_min) * Ra * 0.408
 
         return round(max(0, eto), 2)
 

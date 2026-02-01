@@ -185,10 +185,9 @@ def preview_eto_manual(data):
     """
     Ruteador de Estrategia: Recibe datos crudos y selecciona la fórmula matemática.
     """
-    method = data.get('method', 'PENMAN') # Default robusto
+    method = data.get('method', 'PENMAN') 
     
     # 1. Preparación de Datos Comunes
-    # Convertimos strings a floats seguros
     def get_float(key, default=None):
         val = data.get(key)
         return float(val) if val is not None and val != '' else default
@@ -199,7 +198,7 @@ def preview_eto_manual(data):
     t_max = get_float('temp_max')
     t_min = get_float('temp_min')
     
-    # Calculamos Temp Promedio si no viene (necesaria para muchas fórmulas)
+    # Calculamos Temp Promedio si no viene
     t_avg = get_float('temp_mean')
     if t_avg is None and t_max is not None and t_min is not None:
         t_avg = (t_max + t_min) / 2
@@ -209,60 +208,71 @@ def preview_eto_manual(data):
     wind = get_float('wind_speed')
     solar = get_float('solar_rad')
 
-    # Calcular Día del Año (J) para radiación extraterrestre
+    # Calcular Día del Año (J)
     date_str = data.get('date')
     day_of_year = 1
     if date_str:
         try:
-            # Soporte dual de formatos por seguridad
-            if '/' in date_str:
-                dt = datetime.strptime(date_str, '%d/%m/%Y')
+            # Soporte dual de formatos
+            clean_date = date_str.replace('/', '-')
+            if len(clean_date.split('-')[0]) == 4:
+                dt = datetime.strptime(clean_date, '%Y-%m-%d')
             else:
-                dt = datetime.strptime(date_str, '%Y-%m-%d')
+                dt = datetime.strptime(clean_date, '%d-%m-%Y')
             day_of_year = dt.timetuple().tm_yday
         except:
             pass
 
     # 2. Selección de Fórmula (Strategy Pattern)
     try:
+        # --- GRUPO PENMAN (Completo) ---
         if method == 'PENMAN':
-            # Requiere todo
             if None in [t_max, t_min, rh, wind, solar]:
                 raise ValueError("Penman-Monteith requiere T.Max, T.Min, Humedad, Viento y Radiación.")
-            
-            return ETOFormulas.penman_monteith(
-                temp_max=t_max, temp_min=t_min, humidity=rh, wind_speed=wind,
-                radiation=solar, latitude=lat, day_of_year=day_of_year, elevation=elevation
-            )
+            return ETOFormulas.penman_monteith(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
 
+        elif method == 'CHRISTIANSEN':
+             if None in [t_max, t_min, rh, wind, solar]:
+                 raise ValueError("Christiansen requiere todos los parámetros climáticos.")
+             return ETOFormulas.christiansen(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
+
+        # --- GRUPO TEMPERATURA ---
         elif method == 'HARGREAVES':
-            # Solo Temperaturas
             if None in [t_max, t_min]:
                 raise ValueError("Hargreaves requiere Temperaturas Máxima y Mínima.")
-                
-            return ETOFormulas.hargreaves(
-                temp_max=t_max, temp_min=t_min, temp_avg=t_avg,
-                latitude=lat, day_of_year=day_of_year
-            )
+            return ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
 
-        elif method == 'TURC':
-            if None in [t_avg, rh, solar]:
-                raise ValueError("Turc requiere Temp. Media, Humedad y Radiación.")
-            return ETOFormulas.turc(temp_avg=t_avg, humidity=rh, radiation=solar)
-
+        # --- GRUPO RADIACIÓN ---
         elif method == 'MAKKINK':
             if None in [t_avg, solar]:
                  raise ValueError("Makkink requiere Temp. Media y Radiación.")
-            return ETOFormulas.makkink(temp_avg=t_avg, radiation=solar, elevation=elevation)
+            return ETOFormulas.makkink(t_avg, solar, elevation)
             
-        elif method == 'CHRISTIANSEN':
-             # El método más exigente después de Penman
-             if None in [t_max, t_min, rh, wind, solar]:
-                 raise ValueError("Christiansen requiere todos los parámetros climáticos.")
-             return ETOFormulas.christiansen(
-                 temp_max=t_max, temp_min=t_min, humidity=rh, wind_speed=wind,
-                 radiation=solar, latitude=lat, day_of_year=day_of_year, elevation=elevation
-             )
+        elif method == 'MAKKINK_ABSTEW':
+            if None in [t_avg, solar]:
+                 raise ValueError("Makkink-Abstew requiere Temp. Media y Radiación.")
+            return ETOFormulas.makkink_abstew(t_avg, solar, elevation)
+
+        elif method == 'PRIESTLEY':
+            if None in [t_avg, solar]:
+                 raise ValueError("Priestley-Taylor requiere Temp. Media y Radiación.")
+            return ETOFormulas.priestley_taylor(t_avg, solar, elevation)
+
+        elif method == 'SIMPLE_ABSTEW': # 🟢 AGREGADO
+             if None in [t_max, t_min, solar]:
+                 raise ValueError("Simple Abstew requiere Temperaturas y Radiación.")
+             return ETOFormulas.simple_abstew(t_max, t_min, solar)
+
+        # --- GRUPO HUMEDAD ---
+        elif method == 'TURC':
+            if None in [t_avg, rh, solar]:
+                raise ValueError("Turc requiere Temp. Media, Humedad y Radiación.")
+            return ETOFormulas.turc(t_avg, rh, solar)
+            
+        elif method == 'IVANOV': # 🟢 AGREGADO
+             if None in [t_avg, rh]:
+                 raise ValueError("Ivanov requiere Temp. Media y Humedad.")
+             return ETOFormulas.ivanov(t_avg, rh)
         
         else:
             raise ValueError(f"Método '{method}' no soportado aún en cálculo manual.")
