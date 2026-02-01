@@ -32,7 +32,13 @@ SECRET_KEY = config("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG') == 'True'
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
+if DEBUG:
+    # En desarrollo local (Docker), permitimos todo para evitar estos dolores de cabeza
+    ALLOWED_HOSTS = ["*"]
+else:
+    # En producción mantenemos la lista estricta que ya tienes
+    ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
+
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS]
 
 AUTH_USER_MODEL = "users.CustomUser"

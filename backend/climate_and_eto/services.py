@@ -135,18 +135,20 @@ def get_hybrid_weather(user, target_date, lat, lon):
             eto_val = ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
 
         # Guardar resultado
-        new_record = DailyWeather.objects.create(
+        new_record, created = DailyWeather.objects.update_or_create(
             user=user,
             date=target_date,
-            latitude=lat,
-            longitude=lon,
-            temp_max=t_max,
-            temp_min=t_min,
-            solar_rad=rad if rad > -900 else None,
-            humidity_mean=rh if rh > -900 else None,
-            wind_speed=ws if ws > -900 else None,
-            eto_mm=round(eto_val, 2),
-            source='NASA'
+            defaults={
+                'latitude': lat,
+                'longitude': lon,
+                'temp_max': t_max,
+                'temp_min': t_min,
+                'solar_rad': rad if rad > -900 else None,
+                'humidity_mean': rh if rh > -900 else None,
+                'wind_speed': ws if ws > -900 else None,
+                'eto_mm': round(eto_val, 2),
+                'source': 'NASA'
+            }
         )
         return new_record
 

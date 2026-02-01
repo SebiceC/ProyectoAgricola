@@ -122,3 +122,12 @@ frontend/.env
 backend/.env
 .env
 
+# --- Seguridad & Entorno Local ---
+.env
+.env.*
+! .env.example
+docker-compose.override.yml
+*.pem
+*.key
+.idea/
+.vscode/

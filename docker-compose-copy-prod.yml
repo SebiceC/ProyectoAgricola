@@ -4,7 +4,6 @@ services:
     image: postgres:15-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # En Prod, las variables entran por inyección (Dokploy/K8s), no por archivo
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
@@ -16,13 +15,16 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    # Comportamiento de PROD: Gunicorn + Collectstatic
+    # Comando "Mágico": Migra, recolecta estáticos y arranca
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
              gunicorn --bind 0.0.0.0:8000 backend.wsgi:application"
     volumes:
-      - static_volume:/app/staticfiles
+      - static_volume:/app/staticfiles # Comparte estáticos con Nginx
+      # IMPORTANTE: En producción NO montes código (- .:/app)
+    env_file:
+      - .env # Lee el archivo .env de la RAÍZ
     depends_on:
       - db
     restart: always
@@ -30,14 +32,12 @@ services:
   # --- SERVICIO 3: FRONTEND (Nginx) ---
   frontend:
     build: 
-      
       context: ./frontend
-      target: production-stage
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "80:80" # Único puerto abierto al mundo
     volumes:
-      - static_volume:/app/staticfiles
+      - static_volume:/app/staticfiles # Lee los estáticos de Django
     depends_on:
       - web
     restart: always
