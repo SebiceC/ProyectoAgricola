@@ -23,11 +23,16 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install python-decouple gunicorn psycopg2-binary
 
+
+RUN useradd -m appuser
+
 # Copiar el resto del código
 COPY . /app/
 
-# Crear un usuario no-root por seguridad (Principio de Mínimo Privilegio)
-RUN useradd -m appuser && chown -R appuser:appuser /app
+
+RUN mkdir -p /app/staticfiles && \
+    chown -R appuser:appuser /app/staticfiles && \
+    chown -R appuser:appuser /app
 
 # Cambiar al usuario seguro
 USER appuser
