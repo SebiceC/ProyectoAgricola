@@ -1,9 +1,10 @@
 import ee
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from google.oauth2.service_account import Credentials 
 from .models import PrecipitationRecord
+from django.core.exceptions import ObjectDoesNotExist
 
 # Ruta al archivo JSON
 KEY_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'ee-key.json')
@@ -30,29 +31,28 @@ def inicializar_earth_engine():
 
 def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, end_date):
     """
-    Descarga datos de CHIRPS validando geometría.
+    Descarga datos de CHIRPS (Honesto: Sin modificar fechas).
     """
-    # 1. Validación de Datos de Entrada (DEBUG)
+    # 1. Validación de Datos de Entrada
     print(f"📍 Validando coordenadas para estación '{station.name}': Lat={lat}, Lon={lon}")
 
     try:
-        # Convertir a float y validar rangos terrestres
         f_lat = float(lat)
         f_lon = float(lon)
         
         if not (-90 <= f_lat <= 90):
-            raise ValueError(f"Latitud inválida ({f_lat}). Debe estar entre -90 y 90.")
+            raise ValueError(f"Latitud inválida ({f_lat}).")
         if not (-180 <= f_lon <= 180):
-            raise ValueError(f"Longitud inválida ({f_lon}). Debe estar entre -180 y 180.")
+            raise ValueError(f"Longitud inválida ({f_lon}).")
 
     except (ValueError, TypeError):
-        raise Exception(f"Coordenadas corruptas en la estación: Lat: {lat}, Lon: {lon}")
+        raise Exception(f"Coordenadas corruptas: Lat: {lat}, Lon: {lon}")
 
     # 2. Inicializar Conexión
     inicializar_earth_engine()
     
     # 3. Definir Fechas y Geometría
-    # ⚠️ IMPORTANTE: Earth Engine usa [LONGITUD, LATITUD] (X, Y)
+    # Earth Engine usa [LONGITUD, LATITUD]
     punto = ee.Geometry.Point([f_lon, f_lat])
     
     ee_start = start_date.strftime('%Y-%m-%d')
@@ -65,7 +65,7 @@ def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, 
         .filterDate(ee_start, ee_end) \
         .filterBounds(punto)
 
-    # 5. Reducer (Extraer datos)
+    # 5. Reducer
     def extraer_dato(img):
         date = img.date().format('YYYY-MM-dd')
         value = img.reduceRegion(
@@ -73,14 +73,13 @@ def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, 
             geometry=punto,
             scale=5000 
         ).get('precipitation')
-        # Manejo de nulos en la nube
         return ee.Feature(None, {'date': date, 'precipitation': value})
 
     # Ejecutar en Google
     try:
         data = chirps.map(extraer_dato).getInfo()
     except Exception as e:
-        raise Exception(f"Error interno de Earth Engine al procesar geometría: {e}")
+        raise Exception(f"Error interno GEE: {e}")
 
     # 6. Guardar en BD
     resultados = []
@@ -89,20 +88,24 @@ def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, 
     if 'features' in data:
         for feature in data['features']:
             props = feature['properties']
-            fecha_str = props['date']
-            precip_mm = props['precipitation']
+            fecha_str = props.get('date')
+            precip_mm = props.get('precipitation')
 
-            if precip_mm is None or precip_mm < 0:
+            if precip_mm is None:
+                # Si GEE devuelve nulo, es que no hay dato procesado. Saltamos.
+                continue
+
+            if precip_mm < 0:
                 precip_mm = 0.0
             
             valor_final = round(float(precip_mm), 2)
-            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            fecha_obj = datetime.strptime(fecha_str, '%d-%m-%Y').date()
 
             obj, created = PrecipitationRecord.objects.update_or_create(
                 station=station,
                 date=fecha_obj,
                 defaults={
-                    'precipitation_mm': valor_final,          # <--- FALTABA ESTE CAMPO OBLIGATORIO
+                    'precipitation_mm': valor_final,          
                     'effective_precipitation_mm': valor_final,
                     'source': 'SATELLITE'
                 }
@@ -110,9 +113,23 @@ def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, 
             
             resultados.append({
                 "date": fecha_str,
-                "mm": round(float(precip_mm), 2)
+                "mm": valor_final
             })
             if created: registros_creados += 1
 
-    print(f"✅ Sincronización exitosa: {registros_creados} nuevos registros.")
+    print(f"✅ Sincronización finalizada. Registros nuevos: {registros_creados}.")
     return resultados
+
+def get_precipitation_strictly_local(station, target_date):
+    """
+    Busca datos de precipitación SOLO en la base de datos local.
+    """
+    record = PrecipitationRecord.objects.filter(station=station, date=target_date).first()
+    
+    if not record:
+        raise ObjectDoesNotExist(
+            f"No existe registro de precipitación para el {target_date} en '{station.name}'. "
+            "Por favor sincronice o registre el dato manualmente."
+        )
+    
+    return record

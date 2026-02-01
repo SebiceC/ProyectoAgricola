@@ -4,15 +4,19 @@ from rest_framework.response import Response
 from django.db.models import Q
 from datetime import date, timedelta
 from django.apps import apps 
+from django.core.exceptions import ObjectDoesNotExist
 
 # Modelos y Serializers locales
 from .models import Crop, CropToPlant, IrrigationExecution
 from .serializers import CropSerializer, CropToPlantSerializer, IrrigationExecutionSerializer
 
-# 🟢 IMPORTACIONES NUEVAS (INTEGRACIÓN MODULAR)
-# Importamos el servicio de clima inteligente y la configuración del usuario
-from climate_and_eto.services import get_hybrid_weather
+# 🟢 SERVICIOS ESTRICTOS (Solo Base de Datos Local)
+from climate_and_eto.services import get_weather_strictly_local
 from climate_and_eto.models import IrrigationSettings
+from precipitaciones.services import get_precipitation_strictly_local
+# Usamos apps.get_model para evitar importaciones circulares si las hubiera, 
+# o importamos directo si la estructura lo permite.
+from precipitaciones.models import Station 
 
 # ---------------------------------------------------------
 # VISTAS (VIEWSETS)
@@ -48,23 +52,36 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     # ---------------------------------------------------------
-    # 🧠 EL MOTOR DE DECISIÓN DE RIEGO (ACTUALIZADO)
+    # 🧠 EL MOTOR DE DECISIÓN DE RIEGO (MODO ESTRICTO)
     # ---------------------------------------------------------
     @action(detail=True, methods=['get'])
     def calculate_irrigation(self, request, pk=None):
         planting = self.get_object()
+        user = request.user
         
         # 1. Cargar Configuración del Usuario (O crear default si no existe)
-        settings_obj, _ = IrrigationSettings.objects.get_or_create(user=request.user)
+        settings_obj, _ = IrrigationSettings.objects.get_or_create(user=user)
         
-        # 2. Validar requisitos (Suelo)
+        # 2. VALIDACIÓN A: SUELO
         if not planting.soil:
             return Response(
-                {"error": "Esta siembra no tiene suelo asignado. Vincule uno primero."},
+                {"error": "Falta Suelo", "message": "Esta siembra no tiene suelo asignado. Vincule uno primero."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 3. VALIDACIÓN B: ESTACIÓN METEOROLÓGICA (Para Lluvias)
+        # Asumimos que el usuario debe tener una estación propia o asignada
+        station = Station.objects.filter(user=user).first()
+        if not station:
+             return Response(
+                {
+                    "error": "Falta Estación", 
+                    "message": "No tiene una estación meteorológica configurada. Vaya al módulo 'Precipitaciones' y cree una estación para registrar las lluvias."
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 3. Configurar el "Tanque" del Suelo
+        # 4. Configurar el "Tanque" del Suelo
         s = planting.soil
         root_depth = 0.6 # Profundidad efectiva (m)
         
@@ -81,26 +98,15 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         ram = tam * 0.5            # Agua Fácilmente Disponible (50% del útil)
         limit_critical = limit_cc - ram # Umbral de Riego (Línea Naranja)
 
-        # 4. RECONSTRUCCIÓN HISTÓRICA (El "Loop" de Memoria)
+        # 5. RECONSTRUCCIÓN HISTÓRICA (Loop de Memoria Estricto)
         today = date.today()
         start_date = max(planting.fecha_siembra, today - timedelta(days=30))
         
-        # Cargar Lluvias
-        try:
-            RainModel = apps.get_model('precipitaciones', 'PrecipitationRecord')
-            rain_queryset = RainModel.objects.filter(
-                station__user=request.user, 
-                date__range=[start_date, today]
-            )
-            rains = {r.date: r.effective_precipitation_mm for r in rain_queryset}
-        except LookupError:
-            rains = {}
-
-        # Cargar Riegos Confirmados
+        # Precarga de Riegos (Para evitar N+1 queries en riegos)
         irrigations = {i.date: i.water_volume_mm for i in planting.irrigations.filter(date__range=[start_date, today])}
 
         # Simulación Día a Día
-        current_water = limit_cc # Asumimos suelo lleno al inicio
+        current_water = limit_cc # Asumimos suelo lleno al inicio del periodo de simulación
         curr = start_date
         
         # Variables para auditoría del último día (Ayer)
@@ -109,67 +115,79 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         kc_final = 0.5
         etc_final = 0.0
 
-        while curr < today:
-            
-            # A. Obtener CLIMA (Híbrido: BD o NASA)
-            # Usamos el servicio centralizado que respeta los datos manuales
-            weather = get_hybrid_weather(
-                user=request.user,
-                target_date=curr,
-                lat=planting.soil.latitude or 2.92,
-                lon=planting.soil.longitude or -75.28
+        try:
+            while curr < today:
+                
+                # A. OBTENER CLIMA (ESTRICTO LOCAL)
+                # Si falta el dato, 'get_weather_strictly_local' lanzará ObjectDoesNotExist
+                weather_record = get_weather_strictly_local(user, curr)
+                day_eto = weather_record.eto_mm
+
+                # B. OBTENER LLUVIA (ESTRICTO LOCAL)
+                # Si falta el dato, 'get_precipitation_strictly_local' lanzará ObjectDoesNotExist
+                precip_record = get_precipitation_strictly_local(station, curr)
+                day_rain_bruta = precip_record.effective_precipitation_mm # Usamos el valor guardado
+                
+                # Cálculo de Lluvia Efectiva (Según Configuración)
+                day_rain_eff = 0.0
+                if settings_obj.effective_rain_method == 'FIXED':
+                    day_rain_eff = day_rain_bruta * 0.80 
+                elif settings_obj.effective_rain_method == 'USDA':
+                    if day_rain_bruta < 250:
+                        day_rain_eff = day_rain_bruta * (125 - 0.2 * day_rain_bruta) / 125
+                    else:
+                        day_rain_eff = 125 + 0.1 * day_rain_bruta
+                else: 
+                    day_rain_eff = day_rain_bruta * 0.75
+
+                # C. Riegos Aplicados
+                day_irr_bruto = irrigations.get(curr, 0.0) or 0.0
+                day_irr_neto = day_irr_bruto * settings_obj.system_efficiency
+
+                # D. Kc Dinámico
+                age_days = (curr - planting.fecha_siembra).days
+                kc = 0.5 
+                # Lógica Kc simple (Expandir según necesidad)
+                if age_days < 20: kc = 0.4
+                elif age_days < 50: kc = 0.8
+                else: kc = 1.1 
+
+                day_etc = day_eto * kc
+                
+                # Guardar estado del último día simulado (Ayer)
+                if curr == (today - timedelta(days=1)):
+                    last_eto = day_eto
+                    last_rain = day_rain_bruta
+                    kc_final = kc
+                    etc_final = day_etc
+
+                # BALANCE DE MASAS
+                current_water = current_water - day_etc + day_rain_eff + day_irr_neto
+                
+                # Límites Físicos
+                if current_water > limit_cc: current_water = limit_cc 
+                if current_water < limit_pmp: current_water = limit_pmp 
+                
+                curr += timedelta(days=1)
+
+        except ObjectDoesNotExist as e:
+            # CAPTURA DE ERROR DE DATOS FALTANTES
+            return Response(
+                {
+                    "error": "Datos Faltantes ", 
+                    "message": str(e),
+                    "date": curr.strftime("%Y-%m-%d"),
+                    "solution": f"Debe registrar los datos climáticos/pluviométricos del día {curr.strftime('%Y-%m-%d')} antes de continuar."
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
             )
-            day_eto = weather.eto_mm
+        except Exception as e:
+            return Response(
+                {"error": "Error Interno de Cálculo", "message": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-            # B. Obtener LLUVIA EFECTIVA (Según Configuración)
-            day_rain_bruta = rains.get(curr, 0.0) or 0.0
-            day_rain_eff = 0.0
-
-            if settings_obj.effective_rain_method == 'FIXED':
-                day_rain_eff = day_rain_bruta * 0.80 # 80% Fijo
-            
-            elif settings_obj.effective_rain_method == 'USDA':
-                # Fórmula USDA Soil Conservation Service
-                if day_rain_bruta < 250:
-                    day_rain_eff = day_rain_bruta * (125 - 0.2 * day_rain_bruta) / 125
-                else:
-                    day_rain_eff = 125 + 0.1 * day_rain_bruta
-            
-            else: 
-                # Fallback / DEPENDABLE
-                day_rain_eff = day_rain_bruta * 0.75
-
-            # C. Riegos Aplicados (Afectados por Eficiencia Histórica)
-            # Si el usuario regó 10mm pero su eficiencia es 50%, a la planta le llegaron 5mm
-            day_irr_bruto = irrigations.get(curr, 0.0) or 0.0
-            day_irr_neto = day_irr_bruto * settings_obj.system_efficiency
-
-            # Kc Dinámico
-            age_days = (curr - planting.fecha_siembra).days
-            kc = 0.5 
-            # Lógica Kc simple (Expandir según necesidad)
-            if age_days < 20: kc = 0.4
-            elif age_days < 50: kc = 0.8
-            else: kc = 1.1 
-
-            day_etc = day_eto * kc
-            
-            if curr == (today - timedelta(days=1)):
-                last_eto = day_eto
-                last_rain = day_rain_bruta
-                kc_final = kc
-                etc_final = day_etc
-
-            # BALANCE DE MASAS
-            current_water = current_water - day_etc + day_rain_eff + day_irr_neto
-            
-            # Límites Físicos
-            if current_water > limit_cc: current_water = limit_cc 
-            if current_water < limit_pmp: current_water = limit_pmp 
-            
-            curr += timedelta(days=1)
-
-        # 5. DIAGNÓSTICO FINAL (Estado HOY)
+        # 6. DIAGNÓSTICO FINAL (Estado HOY)
         deficit_neto = limit_cc - current_water 
         
         riego_sugerido_neto = 0.0
@@ -198,10 +216,9 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             estado_suelo = "Saturado"
             mensaje = "Suelo lleno. NO regar."
 
-        # 🟢 CORRECCIÓN CRÍTICA: RIEGO BRUTO
-        # Convertimos la necesidad neta a lo que debe bombear el usuario
+        # Riego Bruto (Considerando Eficiencia)
         efficiency = settings_obj.system_efficiency
-        if efficiency <= 0: efficiency = 0.1 # Evitar división por cero
+        if efficiency <= 0: efficiency = 0.1
             
         riego_sugerido_bruto = riego_sugerido_neto / efficiency
 
@@ -213,7 +230,7 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             "kc_ajustado": round(kc_final, 2),
             "clima": {
                 "eto_ayer": round(last_eto, 2),
-                "fuente": "NASA POWER / Estación Híbrida"
+                "fuente": "Base de Datos Local (Validada)"
             },
             "variables_ambientales": {
                 "eto": round(last_eto, 2),
@@ -228,7 +245,6 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
                 "eficiencia_sistema": f"{int(efficiency*100)}%"
             },
             "recomendacion": {
-                # Enviamos el BRUTO al frontend
                 "riego_sugerido_mm": round(riego_sugerido_bruto, 2),
                 "mensaje": mensaje
             }
@@ -240,12 +256,15 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
     def water_balance_history(self, request, pk=None):
         planting = self.get_object()
         
-        # Cargar configuración para que la gráfica sea consistente con el cálculo
+        # Cargar configuración
         settings_obj, _ = IrrigationSettings.objects.get_or_create(user=request.user)
         
         soil = planting.soil
         if not soil:
             return Response({"error": "Sin suelo vinculado"}, status=400)
+        
+        # Intentamos obtener la estación para graficar lluvias
+        station = Station.objects.filter(user=request.user).first()
 
         # 1. Definir los límites
         root_depth = 0.6 
@@ -266,26 +285,26 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         end_date = date.today()
         start_date = end_date - timedelta(days=30)
         
-        try:
-            RainModel = apps.get_model('precipitaciones', 'PrecipitationRecord')
-            rain_queryset = RainModel.objects.filter(
-                station__user=request.user, 
-                date__range=[start_date, end_date]
-            )
-            rains = {r.date: r.effective_precipitation_mm for r in rain_queryset}
-        except LookupError:
-            rains = {}
-
         irrigations = {i.date: i.water_volume_mm for i in planting.irrigations.filter(date__range=[start_date, end_date])}
 
         delta = timedelta(days=1)
         curr = start_date
 
         while curr <= end_date:
-            # a. Obtener Entradas (Rain + Irr)
-            rain_bruta = rains.get(curr, 0.0) or 0.0
+            # NOTA: Para la gráfica histórica permitimos huecos (try/except silencioso)
+            # para no romper toda la gráfica por un día faltante.
             
-            # Aplicar Fórmula Lluvia (Igual que en calculate_irrigation)
+            # a. Lluvia
+            rain_bruta = 0.0
+            if station:
+                try:
+                    # Usamos el servicio estricto pero atrapamos el error si falta data histórica antigua
+                    precip_rec = get_precipitation_strictly_local(station, curr)
+                    rain_bruta = precip_rec.effective_precipitation_mm
+                except ObjectDoesNotExist:
+                    rain_bruta = 0.0 
+            
+            # Fórmula Lluvia
             rain_eff = 0.0
             if settings_obj.effective_rain_method == 'FIXED': rain_eff = rain_bruta * 0.80
             elif settings_obj.effective_rain_method == 'USDA':
@@ -294,20 +313,19 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             else: rain_eff = rain_bruta * 0.75
 
             irr_bruto = irrigations.get(curr, 0.0) or 0.0
-            # Aplicar Eficiencia Riego
             irr_neto = irr_bruto * settings_obj.system_efficiency
             
-            # b. Obtener Salidas (ETo Híbrida)
-            # Para la gráfica histórica, también usamos el servicio híbrido
-            weather = get_hybrid_weather(
-                user=request.user, 
-                target_date=curr,
-                lat=soil.latitude or 2.92,
-                lon=soil.longitude or -75.28
-            )
-            eto_day = weather.eto_mm
+            # b. ETo
+            eto_day = 0.0
+            try:
+                weather_rec = get_weather_strictly_local(request.user, curr)
+                eto_day = weather_rec.eto_mm
+            except ObjectDoesNotExist:
+                # Si falta ETo en histórico, asumimos promedio o 0 para no romper la UI, 
+                # pero idealmente el usuario ya debió corregirlo en el cálculo principal.
+                eto_day = 4.0 
             
-            kc = 0.5 # (Aquí también deberías usar la lógica dinámica de Kc)
+            kc = 0.5 
             etc = eto_day * kc
 
             # c. Balance
@@ -327,7 +345,7 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
                 "critical_point": round(limit_critical, 2),
                 "wilting_point": round(limit_pmp, 2),
                 "rain": round(rain_bruta, 2),
-                "irrigation": round(irr_bruto, 2), # Mostramos el bruto en la gráfica (lo que aplicó el usuario)
+                "irrigation": round(irr_bruto, 2),
                 "drainage": round(drainage, 2)
             })
             

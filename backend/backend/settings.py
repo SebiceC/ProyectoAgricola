@@ -89,6 +89,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # 🟢 ESTANDARIZACIÓN DE FECHAS (DD/MM/YYYY)
+    'DATE_INPUT_FORMATS': ['%d/%m/%Y', '%Y-%m-%d'], # Aceptamos ambos por seguridad, priorizamos DD/MM/YYYY
+    'DATE_FORMAT': '%d/%m/%Y',       # SALIDA (JSON): Siempre devolverá "31/01/2026"
+    'DATETIME_FORMAT': '%d/%m/%Y %H:%M',
 }
 
 

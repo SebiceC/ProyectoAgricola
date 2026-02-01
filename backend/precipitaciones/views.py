@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from datetime import datetime, timedelta
+from django.utils import timezone # 🟢 Importamos timezone para evitar errores de hora servidor
 
 from .models import Station, PrecipitationRecord
 from .serializers import StationSerializer, PrecipitationRecordSerializer
@@ -32,22 +33,32 @@ class StationViewSet(viewsets.ModelViewSet):
     def fetch_chirps(self, request, pk=None):
         station = self.get_object()
         
-        # Por defecto bajamos los últimos 30 días si no envían fechas en el body
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=30)
+        # 1. Definir fechas por defecto (Hoy y hace 30 días)
+        # Usamos timezone.now() para ser consistentes con la BD
+        now = timezone.now().date()
+        end_date = now
+        start_date = now - timedelta(days=30)
         
-        # Opcional: permitir rango custom desde el body (JSON)
-        if 'start_date' in request.data:
+        # 2. Sobrescribir SOLO si el usuario envía datos válidos (no vacíos)
+        # 🟢 CORRECCIÓN: Usamos .get() y verificamos que no sea string vacío
+        start_input = request.data.get('start_date')
+        end_input = request.data.get('end_date')
+
+        if start_input:
             try:
-                start_date = datetime.strptime(request.data['start_date'], '%Y-%m-%d').date()
+                start_date = datetime.strptime(start_input, '%Y-%m-%d').date()
             except ValueError:
                 return Response({"error": "Formato start_date inválido (YYYY-MM-DD)"}, status=400)
                 
-        if 'end_date' in request.data:
+        if end_input:
             try:
-                end_date = datetime.strptime(request.data['end_date'], '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_input, '%Y-%m-%d').date()
             except ValueError:
                 return Response({"error": "Formato end_date inválido (YYYY-MM-DD)"}, status=400)
+
+        # Validación lógica de fechas
+        if start_date > end_date:
+             return Response({"error": "La fecha de inicio no puede ser mayor a la final"}, status=400)
 
         try:
             # Llamada a Google Earth Engine (Servicio)
@@ -58,14 +69,19 @@ class StationViewSet(viewsets.ModelViewSet):
                 start_date=start_date,
                 end_date=end_date
             )
+            
+            # Contamos los resultados para informar al frontend
+            count = len(resultados) if resultados else 0
+            
             return Response({
-                "message": f"Sincronización exitosa. Se procesaron {len(resultados)} días.",
+                "message": f"Sincronización exitosa. Se procesaron {count} registros.",
+                "count": count,
                 "data": resultados
             })
         except Exception as e:
             print(f"Error CHIRPS: {e}")
             return Response(
-                {"error": "Error conectando con satélite CHIRPS. Verifica credenciales de Earth Engine o intenta más tarde."}, 
+                {"error": f"Error conectando con satélite CHIRPS: {str(e)}"}, 
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 

@@ -5,6 +5,8 @@ from django.conf import settings
 
 from .eto_formules import ETOFormulas
 from .models import DailyWeather, IrrigationSettings
+from django.core.exceptions import ObjectDoesNotExist
+
 
 
 def calculate_eto_hargreaves(t_max, t_min, lat_deg, day_of_year):
@@ -12,7 +14,8 @@ def calculate_eto_hargreaves(t_max, t_min, lat_deg, day_of_year):
     Fórmula Hargreaves-Samani (1985).
     Robusta para cuando faltan datos de viento/humedad.
     """
-    if t_max is None or t_min is None: return 5.0
+    if t_max is None or t_min is None:
+        raise ValueError("Datos de temperatura insuficientes para calcular ETo. Se requiere ingreso manual.")
     
     lat_rad = math.radians(lat_deg)
     # Declinación solar
@@ -154,10 +157,21 @@ def get_hybrid_weather(user, target_date, lat, lon):
 
     except Exception as e:
         print(f"⚠️ Error Crítico Clima: {e}")
-        return DailyWeather(
-            date=target_date, 
-            eto_mm=5.0, 
-            source='ERROR',
-            latitude=lat,
-            longitude=lon
+        raise Exception(f"No se pudieron obtener datos satelitales (NASA POWER): {str(e)}. Por favor, registre el clima manualmente para esta fecha.")
+    
+
+def get_weather_strictly_local(user, target_date):
+    """
+    Busca datos climáticos SOLO en la base de datos local.
+    NO llama a la NASA. Si no existe, lanza error.
+    """
+    record = DailyWeather.objects.filter(user=user, date=target_date).first()
+    
+    if not record:
+        # Lanzamos una excepción controlada para que la Vista la atrape
+        raise ObjectDoesNotExist(
+            f"No existe registro climático para el {target_date}. "
+            "Por favor vaya al módulo 'Clima / ETo' y genere el dato (Manual o vía Satélite) antes de calcular el riego."
         )
+    
+    return record

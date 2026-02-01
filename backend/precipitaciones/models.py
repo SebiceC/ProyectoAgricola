@@ -67,13 +67,10 @@ class PrecipitationRecord(models.Model):
 
     # Calculamos el valor efectivo automáticamente antes de guardar.
     def save(self, *args, **kwargs):
-        if self.precipitation_mm is not None:
-            # Fórmula USDA Soil Conservation Service (Simplificada para operación diaria)
-            # P_eff = P_total * factor (usualmente 0.75 a 0.8 para lluvias moderadas)
-            # O la fórmula compleja: P_eff = P_tot * (125 - 0.2 * P_tot) / 125 (para P < 250mm/mes)
+        if self.effective_precipitation_mm is None or self.source == 'MANUAL':
+            self.effective_precipitation_mm = self.precipitation_mm
             
-            # Usaremos la regla operativa del 75% que definimos en la vista anterior,
-            # pero guardada en base de datos para consistencia.
-            self.effective_precipitation_mm = round(self.precipitation_mm * 0.75, 2)
+        elif self.source != 'MANUAL' and self.effective_precipitation_mm is None:
+             self.effective_precipitation_mm = self.precipitation_mm
             
         super().save(*args, **kwargs)

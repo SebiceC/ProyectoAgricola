@@ -29,7 +29,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
             return Response({"error": "Faltan parámetros date, lat, lon"}, status=400)
 
         try:
-            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            target_date = datetime.strptime(date_str, "%d-%m-%Y").date()
             weather = get_hybrid_weather(request.user, target_date, float(lat), float(lon))
             serializer = self.get_serializer(weather)
             return Response(serializer.data)
