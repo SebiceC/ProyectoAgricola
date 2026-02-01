@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from .eto_formules import ETOFormulas
 
 class DailyWeather(models.Model):
     """
@@ -52,16 +53,6 @@ class IrrigationSettings(models.Model):
     Configuraciones de Fórmulas (Estilo CROPWAT).
     """
     # 🟢 LISTA AMPLIADA DE FÓRMULAS
-    ETO_METHODS = [
-        ("HARGREAVES", "Hargreaves-Samani (Solo Temperatura)"),
-        ("PENMAN", "Penman-Monteith (Estándar FAO / Completo)"),
-        ("TURC", "Turc (Climas Húmedos)"),
-        ("MAKKINK", "Makkink (Radiación y Temp)"),
-        ("MAKKINK_ABSTEW", "Makkink-Abstew (Calibrado)"),
-        ("PRIESTLEY", "Priestley-Taylor (Sin Viento)"),
-        ("IVANOV", "Ivanov (Humedad y Temp)"),
-        ("CHRISTIANSEN", "Christiansen (Datos Completos)"),
-    ]
     
     RAIN_METHODS = [
         ('USDA', 'USDA S.C. Method (Recomendado)'),
@@ -72,7 +63,11 @@ class IrrigationSettings(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='irrigation_settings')
     
     # Preferencias de Cálculo
-    preferred_eto_method = models.CharField(max_length=30, choices=ETO_METHODS, default='PENMAN')
+    preferred_eto_method = models.CharField(
+        max_length=30, 
+        choices=ETOFormulas.get_choices(), # <--- Aquí consumimos la fuente de verdad
+        default='PENMAN'
+    )
     effective_rain_method = models.CharField(max_length=20, choices=RAIN_METHODS, default='USDA')
     
     # Eficiencia del Sistema (Afecta el Riego Neto)

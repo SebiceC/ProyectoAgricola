@@ -1,13 +1,13 @@
 import requests
 import math
-from datetime import date
+import logging
+from datetime import date, datetime
 from django.conf import settings
-
 from .eto_formules import ETOFormulas
 from .models import DailyWeather, IrrigationSettings
 from django.core.exceptions import ObjectDoesNotExist
 
-
+logger = logging.getLogger(__name__)
 
 def calculate_eto_hargreaves(t_max, t_min, lat_deg, day_of_year):
     """
@@ -36,7 +36,7 @@ def calculate_eto_hargreaves(t_max, t_min, lat_deg, day_of_year):
     eto = 0.0023 * (t_mean + 17.8) * (t_max - t_min)**0.5 * 0.408 * ra
     return max(0, eto)
 
-def get_hybrid_weather(user, target_date, lat, lon):
+def get_hybrid_weather(user, target_date, lat, lon, force_method=None):
     """
     MOTOR HÍBRIDO + MULTI-FÓRMULA:
     1. Busca datos manuales.
@@ -51,8 +51,13 @@ def get_hybrid_weather(user, target_date, lat, lon):
         return existing_record
 
     # 2. Configuración del Usuario
-    user_settings, _ = IrrigationSettings.objects.get_or_create(user=user)
-    method = user_settings.preferred_eto_method # Ej: 'PENMAN', 'HARGREAVES'
+    if force_method:
+        method = force_method # 🟢 Usamos el método que viene del frontend
+        print(f"🔧 Usando método forzado por usuario: {method}")
+    else:
+        user_settings, _ = IrrigationSettings.objects.get_or_create(user=user)
+        method = user_settings.preferred_eto_method
+        print(f"⚙️ Usando configuración global: {method}")
 
     # 3. Llamada a NASA API (Pedimos TODO lo necesario para Penman)
     print(f"📡 Solicitando datos NASA ({method}) para {target_date}...")
@@ -175,3 +180,92 @@ def get_weather_strictly_local(user, target_date):
         )
     
     return record
+
+def preview_eto_manual(data):
+    """
+    Ruteador de Estrategia: Recibe datos crudos y selecciona la fórmula matemática.
+    """
+    method = data.get('method', 'PENMAN') # Default robusto
+    
+    # 1. Preparación de Datos Comunes
+    # Convertimos strings a floats seguros
+    def get_float(key, default=None):
+        val = data.get(key)
+        return float(val) if val is not None and val != '' else default
+
+    lat = get_float('latitude', 2.92)
+    elevation = get_float('elevation', 0)
+    
+    t_max = get_float('temp_max')
+    t_min = get_float('temp_min')
+    
+    # Calculamos Temp Promedio si no viene (necesaria para muchas fórmulas)
+    t_avg = get_float('temp_mean')
+    if t_avg is None and t_max is not None and t_min is not None:
+        t_avg = (t_max + t_min) / 2
+
+    # Variables Específicas
+    rh = get_float('humidity')
+    wind = get_float('wind_speed')
+    solar = get_float('solar_rad')
+
+    # Calcular Día del Año (J) para radiación extraterrestre
+    date_str = data.get('date')
+    day_of_year = 1
+    if date_str:
+        try:
+            # Soporte dual de formatos por seguridad
+            if '/' in date_str:
+                dt = datetime.strptime(date_str, '%d/%m/%Y')
+            else:
+                dt = datetime.strptime(date_str, '%Y-%m-%d')
+            day_of_year = dt.timetuple().tm_yday
+        except:
+            pass
+
+    # 2. Selección de Fórmula (Strategy Pattern)
+    try:
+        if method == 'PENMAN':
+            # Requiere todo
+            if None in [t_max, t_min, rh, wind, solar]:
+                raise ValueError("Penman-Monteith requiere T.Max, T.Min, Humedad, Viento y Radiación.")
+            
+            return ETOFormulas.penman_monteith(
+                temp_max=t_max, temp_min=t_min, humidity=rh, wind_speed=wind,
+                radiation=solar, latitude=lat, day_of_year=day_of_year, elevation=elevation
+            )
+
+        elif method == 'HARGREAVES':
+            # Solo Temperaturas
+            if None in [t_max, t_min]:
+                raise ValueError("Hargreaves requiere Temperaturas Máxima y Mínima.")
+                
+            return ETOFormulas.hargreaves(
+                temp_max=t_max, temp_min=t_min, temp_avg=t_avg,
+                latitude=lat, day_of_year=day_of_year
+            )
+
+        elif method == 'TURC':
+            if None in [t_avg, rh, solar]:
+                raise ValueError("Turc requiere Temp. Media, Humedad y Radiación.")
+            return ETOFormulas.turc(temp_avg=t_avg, humidity=rh, radiation=solar)
+
+        elif method == 'MAKKINK':
+            if None in [t_avg, solar]:
+                 raise ValueError("Makkink requiere Temp. Media y Radiación.")
+            return ETOFormulas.makkink(temp_avg=t_avg, radiation=solar, elevation=elevation)
+            
+        elif method == 'CHRISTIANSEN':
+             # El método más exigente después de Penman
+             if None in [t_max, t_min, rh, wind, solar]:
+                 raise ValueError("Christiansen requiere todos los parámetros climáticos.")
+             return ETOFormulas.christiansen(
+                 temp_max=t_max, temp_min=t_min, humidity=rh, wind_speed=wind,
+                 radiation=solar, latitude=lat, day_of_year=day_of_year, elevation=elevation
+             )
+        
+        else:
+            raise ValueError(f"Método '{method}' no soportado aún en cálculo manual.")
+
+    except Exception as e:
+        raise ValueError(f"Error en cálculo: {str(e)}")

@@ -1,9 +1,32 @@
 import math
-from typing import Dict, Optional
+from typing import Dict, List, Tuple
 from datetime import date
 
 class ETOFormulas:
     """Colección de fórmulas para calcular evapotranspiracion de referencia"""
+
+    # 🟢 FUENTE ÚNICA DE VERDAD: Definimos los nombres aquí
+    METHOD_LABELS = {
+        'PENMAN': 'Penman-Monteith (FAO-56)',
+        'HARGREAVES': 'Hargreaves-Samani',
+        'TURC': 'Turc (Zonas Húmedas)',
+        'MAKKINK': 'Makkink (Radiación)',
+        'MAKKINK_ABSTEW': 'Makkink-Abstew (Calibrado)',
+        'PRIESTLEY': 'Priestley-Taylor (Sin Viento)',
+        'IVANOV': 'Ivanov (Humedad y Temp)',
+        'CHRISTIANSEN': 'Christiansen (Datos Completos)',
+        'SIMPLE_ABSTEW': 'Simple Abstew'
+    }
+
+    @classmethod
+    def get_choices(cls) -> List[Tuple[str, str]]:
+        """Devuelve una lista de tuplas para usar en Django Models choices"""
+        return [(k, v) for k, v in cls.METHOD_LABELS.items()]
+
+    @classmethod
+    def get_label(cls, key: str) -> str:
+        """Devuelve el nombre legible de una fórmula"""
+        return cls.METHOD_LABELS.get(key, key)
 
     @staticmethod
     def penman_monteith(
