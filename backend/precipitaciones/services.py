@@ -99,7 +99,7 @@ def obtener_y_guardar_precipitacion_diaria_rango(station, lat, lon, start_date, 
                 precip_mm = 0.0
             
             valor_final = round(float(precip_mm), 2)
-            fecha_obj = datetime.strptime(fecha_str, '%d-%m-%Y').date()
+            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
 
             obj, created = PrecipitationRecord.objects.update_or_create(
                 station=station,
