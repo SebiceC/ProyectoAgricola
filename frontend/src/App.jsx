@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import ForgotPassword from './pages/ForgotPassword'; 
 import ResetPassword from './pages/ResetPassword';
 import Profile from './pages/Profile';
+import CropManager from './pages/CropManager';
 
 // components
 import SessionExpiredModal from './components/SessionExpiredModal';
@@ -60,6 +61,7 @@ function App() {
             {/* Sub-rutas funcionales */}
             <Route path="mis-cultivos" element={<MyCrops />} />
             <Route path="nuevo-cultivo" element={<NewPlanting />} />
+            <Route path="cultivos-base" element={<CropManager />} />
             <Route path="suelos" element={<SoilManager />} />
             <Route path="clima" element={<ClimateEto />} />
             <Route path="lluvia" element={<PrecipitationManager />} />
