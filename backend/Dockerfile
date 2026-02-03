@@ -29,6 +29,8 @@ RUN useradd -m appuser
 # Copiar el resto del código
 COPY . /app/
 
+RUN sed -i 's/\r$//g' /app/manage.py
+
 
 RUN mkdir -p /app/staticfiles && \
     chown -R appuser:appuser /app/staticfiles && \
