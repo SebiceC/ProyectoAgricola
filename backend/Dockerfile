@@ -29,6 +29,8 @@ RUN useradd -m appuser
 # Copiar el resto del código
 COPY . /app/
 
+RUN find /app -type f -name "*.py" -exec sed -i 's/\r$//g' {} +
+
 RUN sed -i 's/\r$//g' /app/manage.py
 
 
