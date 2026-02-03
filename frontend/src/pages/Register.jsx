@@ -55,7 +55,7 @@ export default function Register() {
       <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-100">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-agri-dark">Crear Cuenta</h1>
-          <p className="text-gray-500 text-sm mt-1">Únete a CropWat App</p>
+          <p className="text-gray-500 text-sm mt-1">¡Únete a ETFlow!</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
