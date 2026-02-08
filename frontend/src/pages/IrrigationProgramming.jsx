@@ -3,11 +3,10 @@ import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import { 
   Droplets, Sprout, Wind, AlertTriangle, CheckCircle, 
-  Info, Calculator, Save, X, ArrowRight
+  Info, Calculator, Save, X, ArrowRight, Layers
 } from 'lucide-react';
 
 import IrrigationChart from './IrrigationChart';
-// 🟢 IMPORT: Usamos la utilidad centralizada de fechas
 import { toStandardDate } from '../utils/dateUtils';
 
 export default function IrrigationProgramming() {
@@ -109,12 +108,10 @@ export default function IrrigationProgramming() {
           await api.post('/cultivo/executions/', {
               planting: confirmModal.plantId,
               water_volume_mm: parseFloat(realIrrigation),
-              // 🟢 AJUSTE DE FECHA: Enviamos DD/MM/YYYY al backend
               date: isoDate
           });
           toast.success("Riego registrado exitosamente.");
           setConfirmModal({ open: false, plantId: null, suggestedMm: 0 });
-          // Recalcular automáticamente para ver el nuevo balance
           handleCalculate(confirmModal.plantId);
       } catch (error) {
           console.error(error);
@@ -148,7 +145,6 @@ export default function IrrigationProgramming() {
                             {plant.crop_details?.nombre || "Cultivo #" + plant.id}
                         </h3>
                         <p className="text-sm text-gray-500 flex items-center gap-2">
-                             {/* 🟢 AJUSTE VISUAL: Aseguramos formato estándar */}
                              Sembrado: {toStandardDate(plant.fecha_siembra)} 
                              <span className="text-gray-300">|</span> 
                              {plant.soil?.nombre || <span className="text-red-400 font-bold flex items-center gap-1"><AlertTriangle size={12}/> Sin Suelo</span>}
@@ -168,23 +164,38 @@ export default function IrrigationProgramming() {
               {result && (
                 <div className="p-6 animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                        {/* Tarjeta Principal */}
+                        
+                        {/* 🟢 TARJETA PRINCIPAL CON VOLÚMENES */}
                         <div className="bg-blue-50 rounded-xl p-6 border border-blue-100 text-center flex flex-col justify-center items-center relative shadow-sm">
                             <h4 className="text-sm font-bold text-blue-800 uppercase mb-2">Riego Sugerido (Bruto)</h4>
-                            <div className="flex items-baseline gap-1 my-2">
+                            <div className="flex items-baseline gap-1 my-1">
                                 <span className="text-5xl font-black text-blue-700">{result.recomendacion.riego_sugerido_mm}</span>
                                 <span className="text-xl font-medium text-blue-500">mm</span>
                             </div>
                             
+                            {/* SECCIÓN NUEVA: VOLÚMENES */}
+                            {result.recomendacion.riego_sugerido_mm > 0 && (
+                                <div className="mt-4 w-full bg-white/60 p-3 rounded-lg border border-blue-100 grid grid-cols-2 gap-2 text-left shadow-sm">
+                                    <div>
+                                        <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">Volumen Total</span>
+                                        <span className="text-lg font-bold text-gray-800 block leading-tight">{result.recomendacion.volumen_total_m3} m³</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">En Litros</span>
+                                        <span className="text-lg font-bold text-blue-600 block leading-tight">{result.recomendacion.volumen_total_litros?.toLocaleString()} L</span>
+                                    </div>
+                                </div>
+                            )}
+                            
                             {result.recomendacion.riego_sugerido_mm > 0 ? (
                                 <button 
                                     onClick={() => openConfirmModal(plant.id, result.recomendacion.riego_sugerido_mm)}
-                                    className="mt-4 bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+                                    className="mt-4 bg-green-600 hover:bg-green-700 text-white text-sm px-6 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105 w-full justify-center"
                                 >
                                     <CheckCircle size={16}/> Confirmar Aplicación
                                 </button>
                             ) : (
-                                <span className="text-xs text-blue-400 mt-2 block font-medium bg-white px-2 py-1 rounded-full border border-blue-100">
+                                <span className="text-xs text-blue-400 mt-4 block font-medium bg-white px-3 py-1 rounded-full border border-blue-100 shadow-sm">
                                     ✅ No se requiere riego hoy
                                 </span>
                             )}
@@ -296,4 +307,4 @@ export default function IrrigationProgramming() {
       )}
     </div>
   );
-}
+} 
