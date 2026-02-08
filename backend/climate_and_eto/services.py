@@ -1,281 +1,396 @@
 import requests
-import math
 import logging
-from datetime import date, datetime
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
 from django.conf import settings
 from .eto_formules import ETOFormulas
 from .models import DailyWeather, IrrigationSettings
 from django.core.exceptions import ObjectDoesNotExist
+from .bussiness_logic.nasa_power_api import NASAPowerAPI
 
 logger = logging.getLogger(__name__)
 
-def calculate_eto_hargreaves(t_max, t_min, lat_deg, day_of_year):
-    """
-    Fórmula Hargreaves-Samani (1985).
-    Robusta para cuando faltan datos de viento/humedad.
-    """
-    if t_max is None or t_min is None:
-        raise ValueError("Datos de temperatura insuficientes para calcular ETo. Se requiere ingreso manual.")
-    
-    lat_rad = math.radians(lat_deg)
-    # Declinación solar
-    delta = 0.409 * math.sin(((2 * math.pi / 365) * day_of_year) - 1.39)
-    # Ángulo horario de puesta de sol
-    ws = math.acos(-math.tan(lat_rad) * math.tan(delta))
-    # Distancia relativa Tierra-Sol inversa
-    dr = 1 + 0.033 * math.cos((2 * math.pi / 365) * day_of_year)
-    
-    # Radiación Extraterrestre (Ra)
-    ra = (24 * 60 / math.pi) * 0.0820 * dr * (
-        (ws * math.sin(lat_rad) * math.sin(delta)) + 
-        (math.cos(lat_rad) * math.cos(delta) * math.sin(ws))
-    )
+# =============================================================================
+#  HERRAMIENTAS DE DIAGNÓSTICO
+# =============================================================================
+def print_debug_header(title):
+    print(f"\n{'='*60}")
+    print(f" 🕵️‍♂️ DIAGNÓSTICO: {title}")
+    print(f"{'='*60}")
 
-    t_mean = (t_max + t_min) / 2
-    # Fórmula Final
-    eto = 0.0023 * (t_mean + 17.8) * (t_max - t_min)**0.5 * 0.408 * ra
-    return max(0, eto)
+def print_month_stats(df_grouped):
+    print("\n📊 PROMEDIOS (Validación Interna):")
+    print("-" * 95)
+    print(f"{'Mes':<4} | {'TMax':<8} | {'Rad':<8} | {'PENMAN':<8} | {'HARG':<8}")
+    print("-" * 95)
+    # Verificamos si las columnas existen antes de imprimir para evitar errores
+    cols = ['temp_max', 'radiation', 'PENMAN', 'HARGREAVES']
+    available_cols = [c for c in cols if c in df_grouped.columns]
+    
+    for index, row in df_grouped.iterrows():
+        vals = [f"{row[c]:<8.2f}" for c in available_cols]
+        print(f"{index:<4} | {' | '.join(vals)}")
+    print("-" * 95)
+
+# =============================================================================
+#  1. MOTOR DE CÁLCULO VECTORIAL (PRIVADO Y REUTILIZABLE)
+# =============================================================================
+
+def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
+    """
+    Función auxiliar: Baja datos de NASA y calcula TODAS las fórmulas vectorialmente.
+    Devuelve un DataFrame listo para ser analizado (Gráfica) o guardado (Sync).
+    """
+    nasa_api = NASAPowerAPI()
+    try:
+        raw_data = nasa_api.get_daily_data(lat, lon, start_date, end_date)
+    except Exception as e:
+        raise ValueError(f"Error conectando a NASA: {str(e)}")
+
+    if not raw_data:
+        raise ValueError("No se encontraron datos climáticos para el rango seleccionado.")
+
+    # Convertir a DataFrame
+    df = pd.DataFrame.from_dict(raw_data, orient='index')
+    df.index = pd.to_datetime(df.index)
+    
+    # Limpieza de tipos
+    cols = ['temp_max', 'temp_min', 'temp_avg', 'humidity', 'wind_speed', 'radiation', 'pressure']
+    for col in cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    df['day_of_year'] = df.index.dayofyear
+    df['month'] = df.index.month
+
+    # Lógica de cálculo por fila
+    def calculate_daily_row(row):
+        t_max = row.get('temp_max')
+        t_min = row.get('temp_min')
+        t_avg = row.get('temp_avg')
+        rh = row.get('humidity')
+        ws = row.get('wind_speed') 
+        rs = row.get('radiation') 
+        doy = row['day_of_year']
+        
+        # Validar mínimos vitales
+        if pd.isna(t_avg) or pd.isna(rs): 
+            return pd.Series({k: 0 for k in ['PENMAN', 'HARGREAVES', 'TURC']})
+
+        res = {}
+        
+        # --- BLOQUE DE FÓRMULAS ---
+        try:
+            if pd.notna(ws) and pd.notna(rh):
+                res['PENMAN'] = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rs, lat, doy)
+            else: res['PENMAN'] = 0
+        except: res['PENMAN'] = 0
+
+        try: res['HARGREAVES'] = ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, doy)
+        except: res['HARGREAVES'] = 0
+
+        try:
+            if pd.notna(rh): res['TURC'] = ETOFormulas.turc(t_avg, rh, rs)
+            else: res['TURC'] = 0
+        except: res['TURC'] = 0
+        
+        try: res['PRIESTLEY'] = ETOFormulas.priestley_taylor(t_avg, rs)
+        except: res['PRIESTLEY'] = 0
+
+        try: res['MAKKINK'] = ETOFormulas.makkink(t_avg, rs)
+        except: res['MAKKINK'] = 0
+        
+        try: res['MAKKINK_ABSTEW'] = ETOFormulas.makkink_abstew(t_avg, rs)
+        except: res['MAKKINK_ABSTEW'] = 0
+
+        try:
+            if pd.notna(rh): res['IVANOV'] = ETOFormulas.ivanov(t_avg, rh)
+            else: res['IVANOV'] = 0
+        except: res['IVANOV'] = 0
+
+        try:
+            if pd.notna(ws) and pd.notna(rh): res['CHRISTIANSEN'] = ETOFormulas.christiansen(t_max, t_min, rh, ws, rs, lat, doy)
+            else: res['CHRISTIANSEN'] = 0
+        except: res['CHRISTIANSEN'] = 0
+        
+        try:
+             if hasattr(ETOFormulas, 'simple_abstew'): res['SIMPLE_ABSTEW'] = ETOFormulas.simple_abstew(t_max, t_min, rs)
+             else: res['SIMPLE_ABSTEW'] = 0
+        except: res['SIMPLE_ABSTEW'] = 0
+
+        return pd.Series(res)
+
+    # Aplicar vectores
+    eto_columns = df.apply(calculate_daily_row, axis=1)
+    df = pd.concat([df, eto_columns], axis=1)
+    
+    return df
+
+# =============================================================================
+#  2. SERVICIOS DE ANÁLISIS Y SINCRONIZACIÓN
+# =============================================================================
+
+def get_historical_climatology(user, lat, lon, start_date, end_date):
+    """
+    MODO LECTURA: Genera datos para la gráfica.
+    NO guarda en base de datos (evita ensuciar la operación diaria).
+    """
+    print_debug_header(f"Generando Gráfica Histórica ({start_date} a {end_date})")
+    
+    # 1. Calcular en memoria
+    df = _fetch_and_calculate_vectors(lat, lon, start_date, end_date)
+
+    # 2. Agregación Mensual
+    formula_cols = ['PENMAN', 'HARGREAVES', 'TURC', 'PRIESTLEY', 'MAKKINK', 
+                    'MAKKINK_ABSTEW', 'IVANOV', 'CHRISTIANSEN', 'SIMPLE_ABSTEW']
+    valid_cols = [c for c in formula_cols if c in df.columns]
+    
+    monthly_stats = df.groupby('month')[valid_cols].mean().reset_index()
+    
+    # Diagnóstico en consola
+    print_month_stats(df.groupby('month')[['temp_max', 'radiation'] + valid_cols[:2]].mean())
+
+    results = []
+    for _, row in monthly_stats.iterrows():
+        month_idx = int(row['month'])
+        month_name = datetime(2000, month_idx, 1).strftime('%B')
+        eto_results = row[valid_cols].to_dict()
+        eto_results = {k: (max(0, v) if pd.notna(v) else 0) for k, v in eto_results.items()}
+
+        results.append({
+            "month": month_idx,
+            "month_name": month_name,
+            "eto_results": eto_results
+        })
+
+    return results
+
+
+def sync_historical_to_daily(user, lat, lon):
+    """
+    MODO ESCRITURA: Toma el último año de datos y lo inyecta en la tabla operativa.
+    Usa la fórmula preferida del usuario para definir el valor de 'eto_mm'.
+    """
+    print_debug_header(f"💾 SINCRONIZANDO DATOS A OPERACIÓN DIARIA ({user.username})")
+    
+    # 1. Definir rango: Último año hasta HOY
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=365)
+    
+    # 2. Calcular datos (Reutilizamos la lógica vectorial)
+    df = _fetch_and_calculate_vectors(lat, lon, start_date, end_date)
+    
+    # 3. Obtener preferencia del usuario
+    user_settings, _ = IrrigationSettings.objects.get_or_create(user=user)
+    pref_method = user_settings.preferred_eto_method # Ej: 'PENMAN'
+    
+    count_synced = 0
+    count_skipped = 0
+
+    # 4. Guardado Eficiente
+    for date_idx, row in df.iterrows():
+        if pd.isna(row['temp_max']) or pd.isna(row['radiation']):
+            continue
+
+        date_obj = date_idx.date()
+        
+        # A. Respetar datos MANUALES (Regla de Oro)
+        existing = DailyWeather.objects.filter(user=user, date=date_obj).first()
+        if existing and existing.source == 'MANUAL':
+            count_skipped += 1
+            continue
+
+        # B. Extraer valor calculado según preferencia
+        try:
+            val = row.get(pref_method)
+            
+            # Fallback inteligente: Si la fórmula preferida dio 0/Error, intentamos Penman
+            if (pd.isna(val) or val == 0) and row.get('PENMAN', 0) > 0:
+                val = row.get('PENMAN')
+                method_to_save = 'PENMAN' # Avisamos que usamos fallback
+            else:
+                method_to_save = pref_method
+            
+            final_eto = round(float(val), 2) if val else 0.0
+        except:
+            final_eto = 0.0
+            method_to_save = pref_method
+
+        # C. Upsert en BD
+        try:
+            DailyWeather.objects.update_or_create(
+                user=user,
+                date=date_obj,
+                defaults={
+                    'latitude': lat,
+                    'longitude': lon,
+                    'temp_max': row.get('temp_max'),
+                    'temp_min': row.get('temp_min'),
+                    'solar_rad': row.get('radiation'),
+                    'humidity_mean': row.get('humidity'),
+                    'wind_speed': row.get('wind_speed'),
+                    # Aquí guardamos el valor real calculado y el método usado
+                    'eto_mm': final_eto,
+                    'method': method_to_save, 
+                    'source': 'NASA_HISTORIC'
+                }
+            )
+            count_synced += 1
+        except Exception as e:
+            print(f"❌ Error guardando {date_obj}: {e}")
+
+    result_summary = {
+        "synced": count_synced,
+        "skipped": count_skipped,
+        "method_used": pref_method
+    }
+    
+    print(f"✅ Sincronización completada: {result_summary}")
+    return result_summary
+
+# =============================================================================
+#  3. SERVICIO SINGLE DAY (Operación Diaria puntual)
+# =============================================================================
 
 def get_hybrid_weather(user, target_date, lat, lon, force_method=None):
-    """
-    MOTOR HÍBRIDO + MULTI-FÓRMULA:
-    1. Busca datos manuales.
-    2. Si no, baja datos de NASA.
-    3. Carga la configuración del usuario (Penman vs Hargreaves vs Turc).
-    4. Aplica la fórmula elegida.
-    """
-    
     # 1. BD Local
     existing_record = DailyWeather.objects.filter(user=user, date=target_date).first()
     if existing_record:
-        return existing_record
+        # Si existe pero tiene ETo en 0 (posible error previo), no retornamos, dejamos que recalcule
+        if existing_record.eto_mm == 0 and existing_record.temp_max:
+             pass 
+        else:
+             return existing_record
 
-    # 2. Configuración del Usuario
+    # 2. Configuración
     if force_method:
-        method = force_method # 🟢 Usamos el método que viene del frontend
-        print(f"🔧 Usando método forzado por usuario: {method}")
+        method = force_method 
     else:
         user_settings, _ = IrrigationSettings.objects.get_or_create(user=user)
         method = user_settings.preferred_eto_method
-        print(f"⚙️ Usando configuración global: {method}")
 
-    # 3. Llamada a NASA API (Pedimos TODO lo necesario para Penman)
-    print(f"📡 Solicitando datos NASA ({method}) para {target_date}...")
+    print(f"📡 NASA: Consultando día {target_date}...")
+    
     try:
-        str_date = target_date.strftime("%Y%m%d")
-        url = "https://power.larc.nasa.gov/api/temporal/daily/point"
-        params = {
-            # Temp, Radiación, Humedad, Viento
-            "parameters": "T2M_MAX,T2M_MIN,ALLSKY_SFC_SW_DWN,RH2M,WS2M", 
-            "community": "AG",
-            "longitude": lon,
-            "latitude": lat,
-            "start": str_date,
-            "end": str_date,
-            "format": "JSON"
-        }
+        # 3. Llamada a NASA API
+        nasa_api = NASAPowerAPI()
+        # Pedimos un buffer pequeño para asegurar zona horaria
+        raw_data = nasa_api.get_daily_data(lat, lon, target_date, target_date)
         
-        response = requests.get(url, params=params, timeout=8)
-        response.raise_for_status()
-        data = response.json()
-        props = data['properties']['parameter']
-        
-        # Extracción segura de datos
-        t_max = props['T2M_MAX'].get(str_date, -999)
-        t_min = props['T2M_MIN'].get(str_date, -999)
-        rad = props['ALLSKY_SFC_SW_DWN'].get(str_date, -999)
-        rh = props['RH2M'].get(str_date, -999) # Humedad
-        ws = props['WS2M'].get(str_date, -999) # Viento
+        target_str = target_date.strftime("%Y-%m-%d")
+        day_data = raw_data.get(target_str)
 
-        if t_max == -999: raise ValueError("Datos NASA corruptos")
+        if not day_data:
+            print(f"⚠️ NASA no tiene datos para {target_str} (Posible Lag).")
+            raise ObjectDoesNotExist(f"Datos satelitales aún no disponibles para {target_str}. Por favor ingrese los datos manualmente o espere 24h.")
 
-        # Variables derivadas comunes
-        t_avg = (t_max + t_min) / 2
+        t_max = day_data.get('temp_max')
+        t_min = day_data.get('temp_min')
+        rad = day_data.get('radiation')
+        rh = day_data.get('humidity')
+        ws = day_data.get('wind_speed')
+
         day_of_year = target_date.timetuple().tm_yday
+        t_avg = day_data.get('temp_avg')
         eto_val = 0.0
 
-        # 4. SELECCIÓN DE FÓRMULA 🧮
-
-        # Estrategia: Intentar usar el método preferido, si faltan datos, hacer Fallback
-        
+        # 4. Cálculo de ETo puntual
         try:
             if method == 'PENMAN':
-                if rh != -999 and ws != -999 and rad != -999:
+                if all(x is not None for x in [t_max, t_min, rh, ws, rad]):
                     eto_val = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year)
                 else: raise ValueError("Faltan datos para Penman")
-
-            elif method == 'TURC':
-                if rh != -999 and rad != -999:
-                    eto_val = ETOFormulas.turc(t_avg, rh, rad)
-                else: raise ValueError("Faltan datos para Turc")
-
-            elif method == 'MAKKINK':
-                if rad != -999:
-                    eto_val = ETOFormulas.makkink(t_avg, rad)
-                else: raise ValueError("Faltan datos para Makkink")
-            
-            elif method == 'MAKKINK_ABSTEW':
-                if rad != -999:
-                    eto_val = ETOFormulas.makkink_abstew(t_avg, rad)
-                else: raise ValueError("Faltan datos para Makkink-Abstew")
-
-            elif method == 'PRIESTLEY':
-                if rad != -999:
-                    eto_val = ETOFormulas.priestley_taylor(t_avg, rad)
-                else: raise ValueError("Faltan datos para Priestley")
-
-            elif method == 'IVANOV':
-                if rh != -999:
-                    eto_val = ETOFormulas.ivanov(t_avg, rh)
-                else: raise ValueError("Faltan datos para Ivanov")
-
-            elif method == 'CHRISTIANSEN':
-                if rh != -999 and ws != -999 and rad != -999:
-                    eto_val = ETOFormulas.christiansen(t_max, t_min, rh, ws, rad, lat, day_of_year)
-                else: raise ValueError("Faltan datos para Christiansen")
-
-            else: # Default: HARGREAVES
+            elif method == 'TURC' and rad and rh:
+                eto_val = ETOFormulas.turc(t_avg, rh, rad)
+            elif method == 'MAKKINK' and rad:
+                eto_val = ETOFormulas.makkink(t_avg, rad)
+            elif method == 'CHRISTIANSEN' and all(x is not None for x in [t_max, t_min, rh, ws, rad]):
+                eto_val = ETOFormulas.christiansen(t_max, t_min, rh, ws, rad, lat, day_of_year)
+            elif method == 'IVANOV' and rh:
+                eto_val = ETOFormulas.ivanov(t_avg, rh)
+            elif method == 'HARGREAVES':
+                eto_val = ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
+            else: 
                 eto_val = ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
 
-        except ValueError as ve:
-            print(f"⚠️ Fallback activado: {ve}. Usando Hargreaves.")
-            # Fallback seguro: Hargreaves solo necesita temperatura
+        except Exception as calc_error:
+            print(f"⚠️ Error en cálculo {method}: {calc_error}. Usando Hargreaves.")
             eto_val = ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
 
-        # Guardar resultado
+        # 5. Guardar
         new_record, created = DailyWeather.objects.update_or_create(
             user=user,
             date=target_date,
             defaults={
-                'latitude': lat,
-                'longitude': lon,
-                'temp_max': t_max,
-                'temp_min': t_min,
-                'solar_rad': rad if rad > -900 else None,
-                'humidity_mean': rh if rh > -900 else None,
-                'wind_speed': ws if ws > -900 else None,
+                'latitude': lat, 'longitude': lon,
+                'temp_max': t_max, 'temp_min': t_min,
+                'solar_rad': rad,
+                'humidity_mean': rh,
+                'wind_speed': ws,
                 'eto_mm': round(eto_val, 2),
-                'source': 'NASA'
+                'source': 'NASA',
+                'method': method # Guardamos qué método se usó
             }
         )
         return new_record
 
+    except ObjectDoesNotExist as e:
+        raise e
     except Exception as e:
-        print(f"⚠️ Error Crítico Clima: {e}")
-        raise Exception(f"No se pudieron obtener datos satelitales (NASA POWER): {str(e)}. Por favor, registre el clima manualmente para esta fecha.")
-    
+        logger.error(f"Error crítico en get_hybrid_weather: {e}")
+        raise Exception(f"No se pudieron obtener datos satelitales: {str(e)}")
+
+# =============================================================================
+#  4. UTILS
+# =============================================================================
 
 def get_weather_strictly_local(user, target_date):
-    """
-    Busca datos climáticos SOLO en la base de datos local.
-    NO llama a la NASA. Si no existe, lanza error.
-    """
     record = DailyWeather.objects.filter(user=user, date=target_date).first()
-    
     if not record:
-        # Lanzamos una excepción controlada para que la Vista la atrape
-        raise ObjectDoesNotExist(
-            f"No existe registro climático para el {target_date}. "
-            "Por favor vaya al módulo 'Clima / ETo' y genere el dato (Manual o vía Satélite) antes de calcular el riego."
-        )
-    
+        raise ObjectDoesNotExist(f"No existe registro climático para el {target_date}.")
     return record
 
 def preview_eto_manual(data):
-    """
-    Ruteador de Estrategia: Recibe datos crudos y selecciona la fórmula matemática.
-    """
     method = data.get('method', 'PENMAN') 
-    
-    # 1. Preparación de Datos Comunes
     def get_float(key, default=None):
         val = data.get(key)
-        return float(val) if val is not None and val != '' else default
+        try: return float(val) if val is not None and val != '' else default
+        except: return default
 
     lat = get_float('latitude', 2.92)
     elevation = get_float('elevation', 0)
-    
     t_max = get_float('temp_max')
     t_min = get_float('temp_min')
     
-    # Calculamos Temp Promedio si no viene
     t_avg = get_float('temp_mean')
     if t_avg is None and t_max is not None and t_min is not None:
         t_avg = (t_max + t_min) / 2
 
-    # Variables Específicas
     rh = get_float('humidity')
     wind = get_float('wind_speed')
     solar = get_float('solar_rad')
 
-    # Calcular Día del Año (J)
     date_str = data.get('date')
     day_of_year = 1
     if date_str:
         try:
-            # Soporte dual de formatos
             clean_date = date_str.replace('/', '-')
-            if len(clean_date.split('-')[0]) == 4:
-                dt = datetime.strptime(clean_date, '%Y-%m-%d')
-            else:
-                dt = datetime.strptime(clean_date, '%d-%m-%Y')
+            if len(clean_date.split('-')[0]) == 4: dt = datetime.strptime(clean_date, '%Y-%m-%d')
+            else: dt = datetime.strptime(clean_date, '%d-%m-%Y')
             day_of_year = dt.timetuple().tm_yday
-        except:
-            pass
+        except: pass
 
-    # 2. Selección de Fórmula (Strategy Pattern)
     try:
-        # --- GRUPO PENMAN (Completo) ---
-        if method == 'PENMAN':
-            if None in [t_max, t_min, rh, wind, solar]:
-                raise ValueError("Penman-Monteith requiere T.Max, T.Min, Humedad, Viento y Radiación.")
-            return ETOFormulas.penman_monteith(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
-
-        elif method == 'CHRISTIANSEN':
-             if None in [t_max, t_min, rh, wind, solar]:
-                 raise ValueError("Christiansen requiere todos los parámetros climáticos.")
-             return ETOFormulas.christiansen(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
-
-        # --- GRUPO TEMPERATURA ---
-        elif method == 'HARGREAVES':
-            if None in [t_max, t_min]:
-                raise ValueError("Hargreaves requiere Temperaturas Máxima y Mínima.")
-            return ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
-
-        # --- GRUPO RADIACIÓN ---
-        elif method == 'MAKKINK':
-            if None in [t_avg, solar]:
-                 raise ValueError("Makkink requiere Temp. Media y Radiación.")
-            return ETOFormulas.makkink(t_avg, solar, elevation)
-            
-        elif method == 'MAKKINK_ABSTEW':
-            if None in [t_avg, solar]:
-                 raise ValueError("Makkink-Abstew requiere Temp. Media y Radiación.")
-            return ETOFormulas.makkink_abstew(t_avg, solar, elevation)
-
-        elif method == 'PRIESTLEY':
-            if None in [t_avg, solar]:
-                 raise ValueError("Priestley-Taylor requiere Temp. Media y Radiación.")
-            return ETOFormulas.priestley_taylor(t_avg, solar, elevation)
-
-        elif method == 'SIMPLE_ABSTEW': # 🟢 AGREGADO
-             if None in [t_max, t_min, solar]:
-                 raise ValueError("Simple Abstew requiere Temperaturas y Radiación.")
-             return ETOFormulas.simple_abstew(t_max, t_min, solar)
-
-        # --- GRUPO HUMEDAD ---
-        elif method == 'TURC':
-            if None in [t_avg, rh, solar]:
-                raise ValueError("Turc requiere Temp. Media, Humedad y Radiación.")
-            return ETOFormulas.turc(t_avg, rh, solar)
-            
-        elif method == 'IVANOV': # 🟢 AGREGADO
-             if None in [t_avg, rh]:
-                 raise ValueError("Ivanov requiere Temp. Media y Humedad.")
-             return ETOFormulas.ivanov(t_avg, rh)
-        
-        else:
-            raise ValueError(f"Método '{method}' no soportado aún en cálculo manual.")
-
+        if method == 'PENMAN': return ETOFormulas.penman_monteith(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
+        elif method == 'CHRISTIANSEN': return ETOFormulas.christiansen(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
+        elif method == 'HARGREAVES': return ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
+        elif method == 'MAKKINK': return ETOFormulas.makkink(t_avg, solar, elevation)
+        elif method == 'MAKKINK_ABSTEW': return ETOFormulas.makkink_abstew(t_avg, solar, elevation)
+        elif method == 'PRIESTLEY': return ETOFormulas.priestley_taylor(t_avg, solar, elevation)
+        elif method == 'SIMPLE_ABSTEW': return ETOFormulas.simple_abstew(t_max, t_min, solar)
+        elif method == 'TURC': return ETOFormulas.turc(t_avg, rh, solar)
+        elif method == 'IVANOV': return ETOFormulas.ivanov(t_avg, rh)
+        else: raise ValueError(f"Método '{method}' no soportado.")
     except Exception as e:
-        raise ValueError(f"Error en cálculo: {str(e)}")
+        raise ValueError(f"Error en cálculo manual: {str(e)}")

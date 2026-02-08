@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import DailyWeather, IrrigationSettings
+from .models import DailyWeather, IrrigationSettings, ClimateStudy
 
 class DailyWeatherSerializer(serializers.ModelSerializer):
     class Meta:
@@ -12,3 +12,9 @@ class IrrigationSettingsSerializer(serializers.ModelSerializer):
         model = IrrigationSettings
         fields = '__all__'
         read_only_fields = ('user',)
+
+class ClimateStudySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClimateStudy
+        fields = '__all__'
+        read_only_fields = ('user', 'created_at')

@@ -3,9 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from datetime import datetime
 from .eto_formules import ETOFormulas
-from .models import DailyWeather, IrrigationSettings
-from .serializers import DailyWeatherSerializer, IrrigationSettingsSerializer
-from .services import get_hybrid_weather, preview_eto_manual
+from .models import DailyWeather, IrrigationSettings, ClimateStudy
+from .serializers import DailyWeatherSerializer, IrrigationSettingsSerializer, ClimateStudySerializer
+from .services import get_hybrid_weather, preview_eto_manual, get_historical_climatology
 
 class DailyWeatherViewSet(viewsets.ModelViewSet):
     serializer_class = DailyWeatherSerializer
@@ -14,9 +14,8 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return DailyWeather.objects.filter(user=self.request.user).order_by('-date')
 
-    # 🟢 AGREGAR ESTO: Inyección de Usuario al Crear (POST)
+    # 🟢 Inyección de Usuario al Crear (POST)
     def perform_create(self, serializer):
-        # Al guardar, le decimos: "El dueño de esto es quien hizo la petición"
         serializer.save(user=self.request.user)
         
     @action(detail=False, methods=['get'])
@@ -25,11 +24,11 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
         lat = request.query_params.get('lat')
         lon = request.query_params.get('lon')
 
-        if not date_str or not lat:
-            return Response({"error": "Faltan parámetros date, lat, lon"}, status=400)
+        if not date_str:
+            return Response({"error": "Falta parámetro date"}, status=400)
 
         try:
-            # 🟢 CORRECCIÓN: Detección inteligente de formato (ISO vs Latino)
+            # 🟢 Detección inteligente de formato (ISO vs Latino)
             clean_date = date_str.replace('/', '-')
             
             if len(clean_date.split('-')[0]) == 4:
@@ -39,7 +38,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
                 # Formato DD-MM-YYYY (01-02-2026)
                 target_date = datetime.strptime(clean_date, "%d-%m-%Y").date()
 
-            # Si lat/lon no vienen, usamos defaults (necesario para get_hybrid_weather)
+            # Si lat/lon no vienen, usamos defaults
             safe_lat = float(lat) if lat else 2.92
             safe_lon = float(lon) if lon else -75.28
 
@@ -51,8 +50,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
         except ValueError as e:
              return Response({"error": f"Error de formato o valor: {str(e)}"}, status=400)
         except Exception as e:
-             # Si no existe y get_hybrid falló (ej. error de conexión NASA en carga inicial)
-             # Devolvemos vacío para que el frontend permita edición manual
+             # Si no existe y get_hybrid falló (ej. Lag de NASA), devolvemos vacío para permitir manual
              print(f"⚠️ Error fetch_for_date: {e}")
              return Response({})
         
@@ -63,7 +61,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
         No guarda en BD, solo retorna el número.
         """
         try:
-            # Llamamos al servicio que creamos arriba
+            # Llamamos al servicio de previsualización
             eto_value = preview_eto_manual(request.data)
             return Response({
                 "eto": eto_value,
@@ -75,7 +73,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"error": "Error interno del servidor"}, status=500)
         
-    # 🟢 NUEVA ACCIÓN: Sincronizar NASA con Fórmula Específica
+    # 🟢 Sincronizar NASA con Fórmula Específica
     @action(detail=False, methods=['post'])
     def sync_nasa(self, request):
         """
@@ -95,8 +93,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
             else:
                 target_date = datetime.strptime(clean_date, "%d-%m-%Y").date()
 
-            # 🟢 CORRECCIÓN: Llamada con todos los argumentos (lat, lon, method)
-            # Pasamos 'force_method' para que use la fórmula del selector del frontend
+            # Llamada al servicio con force_method
             weather_record = get_hybrid_weather(
                 user=request.user, 
                 target_date=target_date, 
@@ -119,6 +116,64 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
              return Response({"error": f"Datos inválidos: {str(e)}"}, status=400)
         except Exception as e:
              return Response({"error": f"Error NASA/Cálculo: {str(e)}"}, status=500)
+    
+    @action(detail=False, methods=['get'])
+    def historical_analysis(self, request):
+        """
+        Endpoint para análisis de datos históricos y comparativa de fórmulas.
+        Params: lat, lon, start_date, end_date
+        """
+        # 1. Primero obtenemos los parámetros (Corrigiendo el error de tu snippet anterior)
+        lat = request.query_params.get('lat')
+        lon = request.query_params.get('lon')
+        start_str = request.query_params.get('start_date')
+        end_str = request.query_params.get('end_date')
+
+        if not all([lat, lon, start_str, end_str]):
+            return Response({"error": "Faltan parámetros (lat, lon, start_date, end_date)"}, status=400)
+
+        try:
+            # 2. Parseo de fechas
+            s_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+            e_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+            
+            if s_date >= e_date:
+                return Response({"error": "La fecha de inicio debe ser anterior a la final"}, status=400)
+
+            # 3. Llamada al servicio pasando el USUARIO para la hidratación de datos
+            # 🟢 AQUÍ ESTÁ EL CAMBIO CLAVE: request.user
+            data = get_historical_climatology(request.user, float(lat), float(lon), s_date, e_date)
+            
+            return Response(data)
+
+        except ValueError as ve:
+            return Response({"error": str(ve)}, status=400)
+        except Exception as e:
+            print(f"Server Error: {e}")
+            return Response({"error": "Error interno procesando climatología"}, status=500)
+        
+    @action(detail=False, methods=['post'])
+    def commit_history(self, request):
+        """
+        Endpoint explícito para GUARDAR los datos históricos en la tabla operativa.
+        """
+        lat = request.data.get('lat')
+        lon = request.data.get('lon')
+        
+        if not lat or not lon:
+            return Response({"error": "Faltan coordenadas"}, status=400)
+
+        try:
+            # Llamamos al nuevo servicio de guardado
+            from .services import sync_historical_to_daily
+            result = sync_historical_to_daily(request.user, float(lat), float(lon))
+            
+            return Response({
+                "message": "Sincronización exitosa",
+                "details": result
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 class IrrigationSettingsViewSet(viewsets.ModelViewSet):
     serializer_class = IrrigationSettingsSerializer
@@ -131,25 +186,17 @@ class IrrigationSettingsViewSet(viewsets.ModelViewSet):
         obj, _ = IrrigationSettings.objects.get_or_create(user=self.request.user)
         return obj
 
-    # 🟢 AGREGAR ESTO: Inyección de Usuario al Crear (POST)
     def perform_create(self, serializer):
-        # Al guardar, le decimos: "El dueño de esto es quien hizo la petición"
         serializer.save(user=self.request.user)
 
-    # 🟢 NUEVO ENDPOINT: /api/climate/settings/choices/
+    # Endpoint para obtener las opciones de fórmulas disponibles
     @action(detail=False, methods=['get'])
     def choices(self, request):
-        """
-        Devuelve las fórmulas disponibles definidas en el Modelo (Backend).
-        Así el Frontend no tiene que 'adivinar' o tenerlas hardcodeadas.
-        """
-        # Generamos la lista de objetos JSON basándonos en el diccionario maestro
         eto_options = [
             {"value": k, "label": v} 
             for k, v in ETOFormulas.METHOD_LABELS.items()
         ]
         
-        # RAIN_METHODS sigue en el modelo
         rain_options = [
             {"value": k, "label": v} 
             for k, v in IrrigationSettings.RAIN_METHODS
@@ -159,3 +206,13 @@ class IrrigationSettingsViewSet(viewsets.ModelViewSet):
             "eto_methods": eto_options,
             "rain_methods": rain_options
         })
+
+class ClimateStudyViewSet(viewsets.ModelViewSet):
+    serializer_class = ClimateStudySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return ClimateStudy.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)

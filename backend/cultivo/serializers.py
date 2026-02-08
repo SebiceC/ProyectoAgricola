@@ -20,12 +20,16 @@ class CropToPlantSerializer(serializers.ModelSerializer):
     # Campos de control para el Frontend
     crear_nuevo_cultivo = serializers.BooleanField(write_only=True, default=False)
     crop_data = CropSerializer(write_only=True, required=False)
+    crop_name = serializers.CharField(source='crop.nombre', read_only=True)
     
     # Nested Serializer para LEER (ver detalles del cultivo en el JSON de respuesta)
     crop_details = CropSerializer(source='crop', read_only=True)
     
     # Campo para seleccionar cultivo existente
     crop = serializers.PrimaryKeyRelatedField(queryset=Crop.objects.all(), required=False)
+
+    # Campos de solo lectura (Calculados)
+    densidad_calculada = serializers.FloatField(read_only=True)
 
     soil = serializers.PrimaryKeyRelatedField(
         queryset=Soil.objects.all(),
@@ -38,13 +42,18 @@ class CropToPlantSerializer(serializers.ModelSerializer):
         fields = [
             'id', 
             'crear_nuevo_cultivo', 
-            'crop', 
+            'crop',
+            'crop_name', 
             'crop_data', 
             'crop_details',  # Para que el frontend vea qué cultivo es
             'fecha_siembra', 
             'area', 
             'activo',
             'soil',
+            'distancia_surcos',
+            'distancia_plantas',
+            'densidad_calculada',
+            'fecha_cosecha_estimada'
         ]
         read_only_fields = ('user',) # Seguridad: El usuario se inyecta en el backend
 

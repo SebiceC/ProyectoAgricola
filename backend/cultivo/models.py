@@ -50,8 +50,22 @@ class CropToPlant(models.Model):
 
     # Estado del cultivo
     area = models.FloatField(help_text="Área sembrada en Hectáreas", default=1.0)
+
+    distancia_surcos = models.FloatField(help_text="Distancia entre surcos/hileras (metros)", null=True, blank=True)
+    distancia_plantas = models.FloatField(help_text="Distancia entre plantas (metros)", null=True, blank=True)
+
+    # Campo calculado (Solo lectura para el usuario, calculado por el sistema)
+    densidad_calculada = models.FloatField(help_text="Plantas por Hectárea", null=True, blank=True, editable=False)
+
     activo = models.BooleanField(default=True)
-    
+
+    def save(self, *args, **kwargs):
+        # Lógica de Cálculo de Densidad
+        # Fórmula: 10,000 m² / (Distancia Surco * Distancia Planta)
+        if self.distancia_surcos and self.distancia_plantas and self.distancia_surcos > 0 and self.distancia_plantas > 0:
+            self.densidad_calculada = round(10000 / (self.distancia_surcos * self.distancia_plantas))
+
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.crop.nombre} - {self.fecha_siembra}"

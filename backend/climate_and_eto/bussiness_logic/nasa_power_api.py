@@ -53,22 +53,26 @@ class NASAPowerAPI:
             # FAO Penman-Monteith requiere MJ/m^2/dia.
             # Factor de conversión: 1 kWh = 3.6 MJ
             raw_radiation = parameters.get('ALLSKY_SFC_SW_DWN', {}).get(date_str)
-            radiation_mj = raw_radiation * 3.6 if raw_radiation is not None else None
+            if raw_radiation == -999: raw_radiation = None
 
             day_data = {
                 'temp_max': parameters.get('T2M_MAX', {}).get(date_str),
                 'temp_min': parameters.get('T2M_MIN', {}).get(date_str),
                 'temp_avg': parameters.get('T2M', {}).get(date_str),
                 'humidity': parameters.get('RH2M', {}).get(date_str),
-                'radiation': radiation_mj, # Se usa el valor convertido
+                'radiation': raw_radiation, # Se usa el valor convertido
                 'wind_speed': parameters.get('WS2M', {}).get(date_str),
                 'pressure': parameters.get('PS', {}).get(date_str),
             }
 
             # Validar que no haya valores None críticos
-            if all(value is not None for value in day_data.values()):
+            if day_data['temp_avg'] is not None and day_data['radiation'] is not None:
                 processed_data[formatted_date] = day_data
-            else:
-                print(f"[NASA API] Datos incompletos para {formatted_date}: {day_data}")
 
         return processed_data
+
+def _validate(self, value):
+        """Helper para limpiar valores de error de NASA (-999)"""
+        if value is None or value == -999:
+            return None
+        return value

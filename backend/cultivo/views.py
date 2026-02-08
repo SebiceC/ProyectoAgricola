@@ -219,13 +219,23 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         # Riego Bruto (Considerando Eficiencia)
         efficiency = settings_obj.system_efficiency
         if efficiency <= 0: efficiency = 0.1
-            
         riego_sugerido_bruto = riego_sugerido_neto / efficiency
+
+        # --- 🟢 NUEVO: CÁLCULO DE VOLUMEN TOTAL ---
+        # Fórmula: 1 mm = 10 m³/ha
+        # Volumen (m³) = Lámina (mm) * Área (ha) * 10
+        volumen_m3 = riego_sugerido_bruto * planting.area * 10
+        volumen_litros = volumen_m3 * 1000
 
         response_data = {
             "planting_id": planting.id,
             "fecha_calculo": today,
             "edad_dias": (today - planting.fecha_siembra).days,
+
+            # Datos Geométricos
+            "area_finca_ha": planting.area,
+            "densidad_plantas": planting.densidad_calculada,
+
             "etapa_fenologica": "Dinámica", 
             "kc_ajustado": round(kc_final, 2),
             "clima": {
@@ -246,6 +256,8 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             },
             "recomendacion": {
                 "riego_sugerido_mm": round(riego_sugerido_bruto, 2),
+                "volumen_total_m3": round(volumen_m3, 2),            # Volumen m3
+                "volumen_total_litros": round(volumen_litros),       # Volumen Litros
                 "mensaje": mensaje
             }
         }

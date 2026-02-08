@@ -23,6 +23,14 @@ class DailyWeather(models.Model):
     latitude = models.FloatField(blank=True, null=True)
     longitude = models.FloatField(blank=True, null=True)
 
+    method = models.CharField(
+        max_length=50, 
+        default='PENMAN', 
+        null=True, 
+        blank=True,
+        help_text="Fórmula usada para calcular la ETo"
+    )
+
     # --- VARIABLES CLIMÁTICAS (Datos Crudos) ---
     # Permitimos nulos porque a veces el sensor falla o NASA no trae todo
     temp_max = models.FloatField(verbose_name="T Max (°C)", null=True, blank=True)
@@ -34,7 +42,7 @@ class DailyWeather(models.Model):
     # --- RESULTADO (Calculado o Ingresado) ---
     eto_mm = models.FloatField(verbose_name="ETo (mm/día)", help_text="Evapotranspiración de Referencia")
     
-    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='NASA')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='NASA')
     is_manual_override = models.BooleanField(default=False, help_text="Si es True, la API no sobreescribirá este dato")
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -80,3 +88,31 @@ class IrrigationSettings(models.Model):
 
     def __str__(self):
         return f"Configuración de {self.user.username}"
+    
+
+class ClimateStudy(models.Model):
+    """
+    Modelo para guardar instantáneas de análisis climatológicos históricos.
+    No afecta la operación diaria, sirve como bitácora de consulta.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="climate_studies")
+    name = models.CharField(max_length=100, verbose_name="Nombre del Estudio") # Ej: "Proyecto Mango 2026"
+    
+    # Metadatos del análisis
+    start_date = models.DateField()
+    end_date = models.DateField()
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    
+    # Aquí guardamos TODO el resultado del cálculo (la lista de meses y fórmulas)
+    # Requiere PostgreSQL o SQLite moderno (Django 3.0+)
+    result_data = models.JSONField(verbose_name="Datos Calculados") 
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Estudio Climático"
+
+    def __str__(self):
+        return f"{self.name} ({self.created_at.date()})"
