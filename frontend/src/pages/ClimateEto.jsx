@@ -443,56 +443,182 @@ export default function ClimateEto() {
       
       {/* VISTA 2: ANÁLISIS HISTÓRICO (Con el nuevo botón) */}
       {activeTab === 'HISTORICAL' && (
-          <div className="space-y-6 animate-in fade-in">
-              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                  <h3 className="font-bold text-gray-700 mb-6 flex items-center gap-2 border-b pb-2"><Calendar size={20} className="text-blue-500"/> Configuración del Análisis</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-                      <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Desde</label><input type="date" value={analysisParams.start_date} onChange={e=>setAnalysisParams({...analysisParams, start_date: e.target.value})} className="w-full border p-2 rounded text-sm"/></div>
-                      <div><label className="text-xs font-bold text-gray-500 uppercase block mb-1">Hasta</label><input type="date" value={analysisParams.end_date} onChange={e=>setAnalysisParams({...analysisParams, end_date: e.target.value})} className="w-full border p-2 rounded text-sm"/></div>
-                      <div className="md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase block mb-2">Comparar Fórmulas</label><div className="flex flex-wrap gap-2">{availableMethods.map(m => (<button key={m.value} onClick={() => toggleFormula(m.value)} className={`text-xs px-3 py-1.5 rounded-full border ${selectedFormulas.includes(m.value) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-600'}`}>{m.label}</button>))}</div></div>
-                  </div>
-                  <div className="mt-6 flex justify-end border-t pt-4"><button onClick={handleAnalyzeHistory} disabled={analyzing} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50">{analyzing ? <RefreshCw className="animate-spin" size={18}/> : <BarChart size={18}/>} Generar Gráfica Climatológica</button></div>
-              </div>
-              {historicalData.length > 0 && (
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                       <div className="flex flex-col md:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
-                            <div><h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><FileText size={20} className="text-blue-500"/> Resultados</h3><p className="text-xs text-gray-500 uppercase tracking-wide mt-1">Promedio Anual</p></div>
-                            
-                            {/* 🟢 BOTONERA DE ACCIONES */}
-                            <div className="flex gap-2 flex-wrap justify-end">
-                                {/* Botón Sincronizar (Base de Datos) */}
-                                <button 
-                                    onClick={handleCommitHistory} 
-                                    className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-orange-100 flex items-center gap-2 transition-transform hover:scale-105"
-                                    title="Guardar datos en la tabla diaria"
-                                >
-                                    <Database size={16}/> Sincronizar a Diario
-                                </button>
+        <div className="space-y-6 animate-in fade-in">
+            
+            {/* 1. CONFIGURACIÓN DEL ANÁLISIS */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h3 className="font-bold text-gray-700 mb-6 flex items-center gap-2 border-b pb-2">
+                <Calendar size={20} className="text-blue-500"/> Configuración del Análisis
+            </h3>
+            
+            {/* Grid de Inputs: Coordenadas + Fechas */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                {/* Nuevos Inputs de Latitud/Longitud */}
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Latitud</label>
+                    <input 
+                        type="number" 
+                        step="0.0001"
+                        value={weatherData.latitude} 
+                        onChange={(e) => setWeatherData({...weatherData, latitude: parseFloat(e.target.value)})} 
+                        className="w-full border p-2 rounded text-sm font-mono"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Longitud</label>
+                    <input 
+                        type="number" 
+                        step="0.0001"
+                        value={weatherData.longitude} 
+                        onChange={(e) => setWeatherData({...weatherData, longitude: parseFloat(e.target.value)})} 
+                        className="w-full border p-2 rounded text-sm font-mono"
+                    />
+                </div>
 
-                                <div className="w-px bg-gray-300 mx-1 h-8 hidden md:block"></div>
-                                
-                                {/* Botones de Exportación (Archivos) */}
-                                <button onClick={handleExportExcel} className="bg-green-50 text-green-700 border border-green-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-green-100">
-                                    <FileSpreadsheet size={16}/> Excel
-                                </button>
-                                <button onClick={handleExportImage} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-purple-100">
-                                    <ImageIcon size={16}/> Imagen
-                                </button>
-                                
-                                <div className="w-px bg-gray-300 mx-1 h-8 hidden md:block"></div>
-                                
-                                {/* Botón Guardar Estudio (Biblioteca) */}
-                                <button onClick={() => setShowSaveModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-blue-700 flex items-center gap-2">
-                                    <Save size={16}/> Guardar Estudio
-                                </button>
-                            </div>
-                      </div>
-                      <div ref={chartRef} className="p-4 bg-white rounded-lg"><h4 className="text-center font-bold text-gray-600 mb-4">Evapotranspiración Mensual (mm/día)</h4><div className="h-96 w-full mb-6"><ResponsiveContainer width="100%" height="100%"><LineChart data={historicalData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0"/><XAxis dataKey="name" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} dy={10} /><YAxis label={{ value: 'ETo (mm/día)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: '#9ca3af', fontSize: 12} }} tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false}/><RechartsTooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}} cursor={{stroke: '#e5e7eb', strokeWidth: 2}}/><Legend wrapperStyle={{paddingTop: '20px'}}/>{selectedFormulas.map((f, i) => (<Line key={f} type="monotone" dataKey={f} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 7, strokeWidth: 0}} animationDuration={1500}/>))}</LineChart></ResponsiveContainer></div></div>
-                  </div>
-              )}
-              {showSaveModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl"><h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2"><Save size={20} className="text-green-600"/> Guardar Análisis</h3><div className="mb-6"><label className="text-xs font-bold text-gray-500 uppercase block mb-2">Nombre</label><input autoFocus type="text" value={studyName} onChange={e => setStudyName(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg outline-none"/></div><div className="flex justify-end gap-3"><button onClick={() => setShowSaveModal(false)} className="text-gray-600 font-bold text-sm px-4 py-2 hover:bg-gray-100 rounded-lg">Cancelar</button><button onClick={handleSaveStudy} disabled={!studyName.trim()} className="bg-green-600 text-white font-bold text-sm px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50">Guardar</button></div></div></div>)}
-          </div>
-      )}
+                {/* Inputs de Fecha Existentes */}
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Desde</label>
+                    <input type="date" value={analysisParams.start_date} onChange={e=>setAnalysisParams({...analysisParams, start_date: e.target.value})} className="w-full border p-2 rounded text-sm"/>
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Hasta</label>
+                    <input type="date" value={analysisParams.end_date} onChange={e=>setAnalysisParams({...analysisParams, end_date: e.target.value})} className="w-full border p-2 rounded text-sm"/>
+                </div>
+            </div>
+
+            {/* Selector de Fórmulas y Botón Generar */}
+            <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-t pt-4">
+                <div className="w-full">
+                    <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Comparar Fórmulas</label>
+                    <div className="flex flex-wrap gap-2">
+                        {availableMethods.map(m => (
+                            <button key={m.value} onClick={() => toggleFormula(m.value)} className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${selectedFormulas.includes(m.value) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                {m.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <button onClick={handleAnalyzeHistory} disabled={analyzing} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 min-w-[200px] justify-center transition-transform active:scale-95">
+                    {analyzing ? <RefreshCw className="animate-spin" size={18}/> : <BarChart size={18}/>} Generar Reporte
+                </button>
+            </div>
+            </div>
+
+            {/* 2. RESULTADOS (GRÁFICA Y TABLA) */}
+            {historicalData.length > 0 && (
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
+                    <div>
+                        <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                            <FileText size={20} className="text-blue-500"/> Resultados Climatológicos
+                        </h3>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide mt-1">
+                            Promedio Mensual ({analysisParams.start_date} - {analysisParams.end_date})
+                        </p>
+                    </div>
+                    
+                    {/* Botonera de Acciones */}
+                    <div className="flex gap-2 flex-wrap justify-end">
+                        <button onClick={handleCommitHistory} className="bg-orange-50 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg text-xs font-bold shadow-sm hover:bg-orange-100 flex items-center gap-2 transition-transform hover:scale-105" title="Sincronizar a Diario">
+                            <Database size={16}/> Sincronizar
+                        </button>
+                        <div className="w-px bg-gray-300 mx-1 h-8 hidden md:block"></div>
+                        <button onClick={handleExportExcel} className="bg-green-50 text-green-700 border border-green-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-green-100">
+                            <FileSpreadsheet size={16}/> Excel
+                        </button>
+                        <button onClick={handleExportImage} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-purple-100">
+                            <ImageIcon size={16}/> Imagen
+                        </button>
+                        <div className="w-px bg-gray-300 mx-1 h-8 hidden md:block"></div>
+                        <button onClick={() => setShowSaveModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-blue-700 flex items-center gap-2">
+                            <Save size={16}/> Guardar
+                        </button>
+                    </div>
+                </div>
+
+                {/* GRÁFICA */}
+                <div ref={chartRef} className="p-4 bg-white rounded-lg border border-gray-100 mb-8">
+                    <h4 className="text-center font-bold text-gray-600 mb-4 text-sm uppercase">Comportamiento ETo (mm/día)</h4>
+                    <div className="h-80 w-full mb-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={historicalData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0"/>
+                                <XAxis dataKey="name" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} dy={10} />
+                                <YAxis label={{ value: 'ETo (mm/día)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: '#9ca3af', fontSize: 12} }} tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false}/>
+                                {/* 🟢 Tooltip con Redondeo */}
+                                <RechartsTooltip 
+                                    formatter={(value) => [`${Number(value).toFixed(2)} mm`, "ETo"]}
+                                    labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}} 
+                                    cursor={{stroke: '#e5e7eb', strokeWidth: 2}}
+                                />
+                                <Legend wrapperStyle={{paddingTop: '20px'}}/>
+                                {selectedFormulas.map((f, i) => (
+                                    <Line key={f} type="monotone" dataKey={f} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 7, strokeWidth: 0}} animationDuration={1500}/>
+                                ))}
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* 🟢 NUEVA TABLA DE DATOS MENSUALES */}
+                <div className="overflow-x-auto border rounded-xl border-gray-200">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-xs text-gray-500 uppercase font-bold">
+                            <tr>
+                                <th className="px-6 py-4">Mes</th>
+                                {selectedFormulas.map((formula) => (
+                                    <th key={formula} className="px-6 py-4 text-center text-blue-700">
+                                        {availableMethods.find(m => m.value === formula)?.label || formula}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {historicalData.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-3 font-medium text-gray-800">{row.name}</td>
+                                    {selectedFormulas.map((formula) => (
+                                        <td key={`${idx}-${formula}`} className="px-6 py-3 text-center font-mono text-gray-600">
+                                            {row[formula] ? Number(row[formula]).toFixed(2) : '-'}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                        {/* Fila de Promedios Generales (Opcional, pero útil) */}
+                        <tfoot className="bg-gray-50 font-bold text-xs uppercase text-gray-700 border-t-2 border-gray-100">
+                            <tr>
+                                <td className="px-6 py-3">Promedio Anual</td>
+                                {selectedFormulas.map(formula => {
+                                    const validValues = historicalData.map(d => d[formula]).filter(v => v !== undefined);
+                                    const avg = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+                                    return (
+                                        <td key={`avg-${formula}`} className="px-6 py-3 text-center text-blue-700">
+                                            {isNaN(avg) ? '-' : avg.toFixed(2)}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+            </div>
+            )}
+
+            {/* Modal Guardar Estudio (Sin cambios) */}
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2"><Save size={20} className="text-green-600"/> Guardar Análisis</h3>
+                        <div className="mb-6"><label className="text-xs font-bold text-gray-500 uppercase block mb-2">Nombre</label><input autoFocus type="text" value={studyName} onChange={e => setStudyName(e.target.value)} className="w-full border border-gray-300 p-3 rounded-lg outline-none"/></div>
+                        <div className="flex justify-end gap-3"><button onClick={() => setShowSaveModal(false)} className="text-gray-600 font-bold text-sm px-4 py-2 hover:bg-gray-100 rounded-lg">Cancelar</button><button onClick={handleSaveStudy} disabled={!studyName.trim()} className="bg-green-600 text-white font-bold text-sm px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50">Guardar</button></div>
+                    </div>
+                </div>
+            )}
+        </div>
+        )}
 
       {activeTab === 'LIBRARY' && (
         <div className="animate-in fade-in">

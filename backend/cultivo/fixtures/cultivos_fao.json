@@ -4,26 +4,6 @@
     "pk": 1,
     "fields": {
       "user": null,
-      "nombre": "Maíz (Grano)",
-      "kc_inicial": 0.3,
-      "kc_medio": 1.2,
-      "kc_fin": 0.35,
-      "etapa_inicial": 20,
-      "etapa_desarrollo": 35,
-      "etapa_medio": 40,
-      "etapa_final": 30,
-      "prof_radicular_ini": 0.3,
-      "prof_radicular_max": 1.2,
-      "agotam_critico": 0.55,
-      "factor_respuesta_rend": 1.25,
-      "altura_max": 2.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 2,
-    "fields": {
-      "user": null,
       "nombre": "Tomate",
       "kc_inicial": 0.6,
       "kc_medio": 1.15,
@@ -33,7 +13,7 @@
       "etapa_medio": 40,
       "etapa_final": 25,
       "prof_radicular_ini": 0.25,
-      "prof_radicular_max": 0.8,
+      "prof_radicular_max": 1.5,
       "agotam_critico": 0.4,
       "factor_respuesta_rend": 1.05,
       "altura_max": 0.6
@@ -41,93 +21,13 @@
   },
   {
     "model": "cultivo.crop",
-    "pk": 3,
-    "fields": {
-      "user": null,
-      "nombre": "Papa (Patata)",
-      "kc_inicial": 0.5,
-      "kc_medio": 1.15,
-      "kc_fin": 0.75,
-      "etapa_inicial": 25,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 45,
-      "etapa_final": 30,
-      "prof_radicular_ini": 0.2,
-      "prof_radicular_max": 0.6,
-      "agotam_critico": 0.35,
-      "factor_respuesta_rend": 1.1,
-      "altura_max": 0.6
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 4,
-    "fields": {
-      "user": null,
-      "nombre": "Arroz",
-      "kc_inicial": 1.05,
-      "kc_medio": 1.2,
-      "kc_fin": 0.9,
-      "etapa_inicial": 30,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 60,
-      "etapa_final": 30,
-      "prof_radicular_ini": 0.1,
-      "prof_radicular_max": 0.5,
-      "agotam_critico": 0.2,
-      "factor_respuesta_rend": 1.0,
-      "altura_max": 1.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 5,
-    "fields": {
-      "user": null,
-      "nombre": "Frijol (Seco)",
-      "kc_inicial": 0.4,
-      "kc_medio": 1.15,
-      "kc_fin": 0.35,
-      "etapa_inicial": 20,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 30,
-      "etapa_final": 20,
-      "prof_radicular_ini": 0.2,
-      "prof_radicular_max": 0.9,
-      "agotam_critico": 0.45,
-      "factor_respuesta_rend": 1.15,
-      "altura_max": 0.5
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 6,
-    "fields": {
-      "user": null,
-      "nombre": "Cebolla (Bulbo Seco)",
-      "kc_inicial": 0.7,
-      "kc_medio": 1.05,
-      "kc_fin": 0.75,
-      "etapa_inicial": 15,
-      "etapa_desarrollo": 25,
-      "etapa_medio": 70,
-      "etapa_final": 40,
-      "prof_radicular_ini": 0.15,
-      "prof_radicular_max": 0.6,
-      "agotam_critico": 0.3,
-      "factor_respuesta_rend": 1.1,
-      "altura_max": 0.5
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 7,
+    "pk": 2,
     "fields": {
       "user": null,
       "nombre": "Café (Sin sombra)",
       "kc_inicial": 0.9,
-      "kc_medio": 0.95,
-      "kc_fin": 0.95,
+      "kc_medio": 1.05,
+      "kc_fin": 1.05,
       "etapa_inicial": 30,
       "etapa_desarrollo": 60,
       "etapa_medio": 180,
@@ -141,13 +41,13 @@
   },
   {
     "model": "cultivo.crop",
-    "pk": 8,
+    "pk": 3,
     "fields": {
       "user": null,
       "nombre": "Banano (1er año)",
       "kc_inicial": 0.5,
-      "kc_medio": 1.1,
-      "kc_fin": 1.0,
+      "kc_medio": 1.10,
+      "kc_fin": 1.00,
       "etapa_inicial": 120,
       "etapa_desarrollo": 90,
       "etapa_medio": 120,
@@ -156,164 +56,44 @@
       "prof_radicular_max": 0.9,
       "agotam_critico": 0.35,
       "factor_respuesta_rend": 1.35,
-      "altura_max": 3.0
+      "altura_max": 4.0
     }
   },
   {
     "model": "cultivo.crop",
-    "pk": 9,
-    "fields": {
-      "user": null,
-      "nombre": "Caña de Azúcar",
-      "kc_inicial": 0.4,
-      "kc_medio": 1.25,
-      "kc_fin": 0.75,
-      "etapa_inicial": 35,
-      "etapa_desarrollo": 60,
-      "etapa_medio": 190,
-      "etapa_final": 80,
-      "prof_radicular_ini": 0.4,
-      "prof_radicular_max": 1.8,
-      "agotam_critico": 0.65,
-      "factor_respuesta_rend": 1.2,
-      "altura_max": 3.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 10,
-    "fields": {
-      "user": null,
-      "nombre": "Trigo (Primavera)",
-      "kc_inicial": 0.3,
-      "kc_medio": 1.15,
-      "kc_fin": 0.25,
-      "etapa_inicial": 15,
-      "etapa_desarrollo": 25,
-      "etapa_medio": 50,
-      "etapa_final": 30,
-      "prof_radicular_ini": 0.3,
-      "prof_radicular_max": 1.2,
-      "agotam_critico": 0.55,
-      "factor_respuesta_rend": 1.15,
-      "altura_max": 1.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 11,
-    "fields": {
-      "user": null,
-      "nombre": "Soya (Soja)",
-      "kc_inicial": 0.4,
-      "kc_medio": 1.15,
-      "kc_fin": 0.5,
-      "etapa_inicial": 20,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 60,
-      "etapa_final": 25,
-      "prof_radicular_ini": 0.3,
-      "prof_radicular_max": 1.3,
-      "agotam_critico": 0.5,
-      "factor_respuesta_rend": 0.85,
-      "altura_max": 0.9
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 12,
-    "fields": {
-      "user": null,
-      "nombre": "Alfalfa (Heno, ciclo corte)",
-      "kc_inicial": 0.4,
-      "kc_medio": 0.95,
-      "kc_fin": 0.9,
-      "etapa_inicial": 5,
-      "etapa_desarrollo": 10,
-      "etapa_medio": 10,
-      "etapa_final": 5,
-      "prof_radicular_ini": 0.5,
-      "prof_radicular_max": 1.5,
-      "agotam_critico": 0.55,
-      "factor_respuesta_rend": 1.1,
-      "altura_max": 0.7
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 13,
-    "fields": {
-      "user": null,
-      "nombre": "Cítricos (Sin cobertura)",
-      "kc_inicial": 0.7,
-      "kc_medio": 0.65,
-      "kc_fin": 0.7,
-      "etapa_inicial": 60,
-      "etapa_desarrollo": 90,
-      "etapa_medio": 120,
-      "etapa_final": 95,
-      "prof_radicular_ini": 0.8,
-      "prof_radicular_max": 1.4,
-      "agotam_critico": 0.5,
-      "factor_respuesta_rend": 0.9,
-      "altura_max": 3.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 14,
-    "fields": {
-      "user": null,
-      "nombre": "Pimiento (Pimentón)",
-      "kc_inicial": 0.6,
-      "kc_medio": 1.05,
-      "kc_fin": 0.9,
-      "etapa_inicial": 30,
-      "etapa_desarrollo": 35,
-      "etapa_medio": 40,
-      "etapa_final": 20,
-      "prof_radicular_ini": 0.25,
-      "prof_radicular_max": 0.8,
-      "agotam_critico": 0.3,
-      "factor_respuesta_rend": 1.1,
-      "altura_max": 0.7
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 15,
+    "pk": 4,
     "fields": {
       "user": null,
       "nombre": "Uva (Viñedo)",
       "kc_inicial": 0.3,
-      "kc_medio": 0.7,
+      "kc_medio": 0.85,
       "kc_fin": 0.45,
       "etapa_inicial": 20,
       "etapa_desarrollo": 40,
-      "etapa_medio": 80,
-      "etapa_final": 40,
+      "etapa_medio": 120,
+      "etapa_final": 60,
       "prof_radicular_ini": 0.6,
-      "prof_radicular_max": 1.5,
-      "agotam_critico": 0.35,
+      "prof_radicular_max": 2.0,
+      "agotam_critico": 0.45,
       "factor_respuesta_rend": 0.85,
       "altura_max": 2.0
     }
   },
   {
     "model": "cultivo.crop",
-    "pk": 16,
+    "pk": 5,
     "fields": {
       "user": null,
       "nombre": "Sandía",
       "kc_inicial": 0.4,
       "kc_medio": 1.0,
       "kc_fin": 0.75,
-      "etapa_inicial": 10,
-      "etapa_desarrollo": 20,
-      "etapa_medio": 30,
-      "etapa_final": 30,
+      "etapa_inicial": 15,
+      "etapa_desarrollo": 25,
+      "etapa_medio": 35,
+      "etapa_final": 20,
       "prof_radicular_ini": 0.3,
-      "prof_radicular_max": 1.0,
+      "prof_radicular_max": 1.5,
       "agotam_critico": 0.4,
       "factor_respuesta_rend": 1.1,
       "altura_max": 0.4
@@ -321,82 +101,182 @@
   },
   {
     "model": "cultivo.crop",
-    "pk": 17,
-    "fields": {
-      "user": null,
-      "nombre": "Zanahoria",
-      "kc_inicial": 0.7,
-      "kc_medio": 1.05,
-      "kc_fin": 0.95,
-      "etapa_inicial": 20,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 30,
-      "etapa_final": 20,
-      "prof_radicular_ini": 0.2,
-      "prof_radicular_max": 0.6,
-      "agotam_critico": 0.35,
-      "factor_respuesta_rend": 1.0,
-      "altura_max": 0.3
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 18,
-    "fields": {
-      "user": null,
-      "nombre": "Lechuga",
-      "kc_inicial": 0.7,
-      "kc_medio": 1.0,
-      "kc_fin": 0.95,
-      "etapa_inicial": 20,
-      "etapa_desarrollo": 30,
-      "etapa_medio": 15,
-      "etapa_final": 10,
-      "prof_radicular_ini": 0.2,
-      "prof_radicular_max": 0.3,
-      "agotam_critico": 0.3,
-      "factor_respuesta_rend": 0.9,
-      "altura_max": 0.3
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 19,
-    "fields": {
-      "user": null,
-      "nombre": "Girasol",
-      "kc_inicial": 0.35,
-      "kc_medio": 1.15,
-      "kc_fin": 0.35,
-      "etapa_inicial": 25,
-      "etapa_desarrollo": 35,
-      "etapa_medio": 45,
-      "etapa_final": 25,
-      "prof_radicular_ini": 0.3,
-      "prof_radicular_max": 1.2,
-      "agotam_critico": 0.45,
-      "factor_respuesta_rend": 0.95,
-      "altura_max": 2.0
-    }
-  },
-  {
-    "model": "cultivo.crop",
-    "pk": 20,
+    "pk": 6,
     "fields": {
       "user": null,
       "nombre": "Cacao",
       "kc_inicial": 1.0,
       "kc_medio": 1.05,
-      "kc_fin": 1.05,
+      "kc_fin": 1.00,
       "etapa_inicial": 100,
       "etapa_desarrollo": 100,
       "etapa_medio": 100,
       "etapa_final": 65,
       "prof_radicular_ini": 0.6,
-      "prof_radicular_max": 1.5,
-      "agotam_critico": 0.4,
+      "prof_radicular_max": 1.0,
+      "agotam_critico": 0.3,
       "factor_respuesta_rend": 0.9,
       "altura_max": 4.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 7,
+    "fields": {
+      "user": null,
+      "nombre": "Palma (Aceitera)",
+      "kc_inicial": 0.95,
+      "kc_medio": 1.00,
+      "kc_fin": 1.00,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 0.5,
+      "prof_radicular_max": 1.2,
+      "agotam_critico": 0.50,
+      "factor_respuesta_rend": 1.0,
+      "altura_max": 10.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 8,
+    "fields": {
+      "user": null,
+      "nombre": "Aguacate",
+      "kc_inicial": 0.60,
+      "kc_medio": 0.85,
+      "kc_fin": 0.75,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 0.5,
+      "prof_radicular_max": 1.0,
+      "agotam_critico": 0.40,
+      "factor_respuesta_rend": 0.85,
+      "altura_max": 5.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 9,
+    "fields": {
+      "user": null,
+      "nombre": "Naranja",
+      "kc_inicial": 0.70,
+      "kc_medio": 0.65,
+      "kc_fin": 0.70,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 0.8,
+      "prof_radicular_max": 1.5,
+      "agotam_critico": 0.50,
+      "factor_respuesta_rend": 0.90,
+      "altura_max": 4.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 10,
+    "fields": {
+      "user": null,
+      "nombre": "Mandarina",
+      "kc_inicial": 0.70,
+      "kc_medio": 0.65,
+      "kc_fin": 0.70,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 0.6,
+      "prof_radicular_max": 1.2,
+      "agotam_critico": 0.50,
+      "factor_respuesta_rend": 0.90,
+      "altura_max": 3.5
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 11,
+    "fields": {
+      "user": null,
+      "nombre": "Mango",
+      "kc_inicial": 0.80,
+      "kc_medio": 1.15,
+      "kc_fin": 0.85,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 1.0,
+      "prof_radicular_max": 2.5,
+      "agotam_critico": 0.40,
+      "factor_respuesta_rend": 0.90,
+      "altura_max": 6.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 12,
+    "fields": {
+      "user": null,
+      "nombre": "Guayaba",
+      "kc_inicial": 0.70,
+      "kc_medio": 0.95,
+      "kc_fin": 0.85,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 95,
+      "prof_radicular_ini": 0.6,
+      "prof_radicular_max": 1.5,
+      "agotam_critico": 0.45,
+      "factor_respuesta_rend": 0.90,
+      "altura_max": 4.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 13,
+    "fields": {
+      "user": null,
+      "nombre": "Pera",
+      "kc_inicial": 0.50,
+      "kc_medio": 1.15,
+      "kc_fin": 0.85,
+      "etapa_inicial": 30,
+      "etapa_desarrollo": 50,
+      "etapa_medio": 130,
+      "etapa_final": 30,
+      "prof_radicular_ini": 1.0,
+      "prof_radicular_max": 2.0,
+      "agotam_critico": 0.50,
+      "factor_respuesta_rend": 0.95,
+      "altura_max": 5.0
+    }
+  },
+  {
+    "model": "cultivo.crop",
+    "pk": 14,
+    "fields": {
+      "user": null,
+      "nombre": "Papaya",
+      "kc_inicial": 0.70,
+      "kc_medio": 0.95,
+      "kc_fin": 0.85,
+      "etapa_inicial": 60,
+      "etapa_desarrollo": 90,
+      "etapa_medio": 120,
+      "etapa_final": 60,
+      "prof_radicular_ini": 0.4,
+      "prof_radicular_max": 1.0,
+      "agotam_critico": 0.40,
+      "factor_respuesta_rend": 1.05,
+      "altura_max": 3.0
     }
   }
 ]
