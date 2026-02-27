@@ -3,7 +3,7 @@ import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import { 
   Droplets, Sprout, Wind, AlertTriangle, CheckCircle, 
-  Info, Calculator, Save, X, ArrowRight, Layers
+  Info, Calculator, Save, X
 } from 'lucide-react';
 
 import IrrigationChart from './IrrigationChart';
@@ -165,7 +165,7 @@ export default function IrrigationProgramming() {
                 <div className="p-6 animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
                         
-                        {/* 🟢 TARJETA PRINCIPAL CON VOLÚMENES */}
+                        {/* TARJETA PRINCIPAL CON VOLÚMENES */}
                         <div className="bg-blue-50 rounded-xl p-6 border border-blue-100 text-center flex flex-col justify-center items-center relative shadow-sm">
                             <h4 className="text-sm font-bold text-blue-800 uppercase mb-2">Riego Sugerido (Bruto)</h4>
                             <div className="flex items-baseline gap-1 my-1">
@@ -184,6 +184,19 @@ export default function IrrigationProgramming() {
                                         <span className="text-[10px] text-gray-500 uppercase font-bold block mb-1">En Litros</span>
                                         <span className="text-lg font-bold text-blue-600 block leading-tight">{result.recomendacion.volumen_total_litros?.toLocaleString()} L</span>
                                     </div>
+                                    
+                                    {/* 🟢 NUEVO BLOQUE: POR PLANTA (Litros) */}
+                                    {result.recomendacion.litros_por_planta && (
+                                        <div className="col-span-2 border-t border-blue-100/50 pt-2 mt-1">
+                                            <span className="text-[10px] text-gray-500 uppercase font-bold flex justify-between">
+                                                Por Planta / Árbol 
+                                                <span className="text-emerald-600 font-mono">Ø {result.recomendacion.diametro_usado}m</span>
+                                            </span>
+                                            <span className="text-lg font-bold text-emerald-600 block leading-tight">
+                                                {result.recomendacion.litros_por_planta} L
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             
@@ -195,8 +208,8 @@ export default function IrrigationProgramming() {
                                     <CheckCircle size={16}/> Confirmar Aplicación
                                 </button>
                             ) : (
-                                <span className="text-xs text-blue-400 mt-4 block font-medium bg-white px-3 py-1 rounded-full border border-blue-100 shadow-sm">
-                                    ✅ No se requiere riego hoy
+                                <span className="text-xs text-green-400 mt-4 block font-medium bg-white px-3 py-1 rounded-full border border-blue-100 shadow-sm">
+                                    No se requiere riego hoy
                                 </span>
                             )}
                         </div>
@@ -217,17 +230,12 @@ export default function IrrigationProgramming() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-white p-3 rounded-lg border border-gray-200">
-                                    <span className="text-xs text-gray-500 block mb-1 uppercase font-bold">ETo (Ayer)</span>
+                                    {/* 🟢 ACTUALIZADO: Muestra si usa fuente Histórica o Diaria */}
+                                    <span className="text-xs text-gray-500 block mb-1 uppercase font-bold">
+                                        ETo ({result.clima.fuente})
+                                    </span>
                                     <div className="flex items-center gap-2">
                                         <p className="font-bold text-gray-800 text-lg">{result.clima.eto_ayer} mm</p>
-                                        
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                                            result.clima.fuente.includes('MANUAL') 
-                                            ? 'bg-green-100 text-green-700 border-green-200' 
-                                            : 'bg-indigo-100 text-indigo-700 border-indigo-200'
-                                        }`}>
-                                            {result.clima.fuente.includes('MANUAL') ? 'MANUAL' : 'AUTO'}
-                                        </span>
                                     </div>
                                 </div>
                                 
@@ -237,12 +245,17 @@ export default function IrrigationProgramming() {
                                 </div>
                             </div>
 
+                            {/* 🟢 ACTUALIZADO: Explicación de Litros vs Área Total */}
                             <div className="text-xs text-gray-400 flex items-start gap-2 mt-2 bg-gray-50 p-3 rounded border border-gray-100">
                                 <Calculator size={14} className="shrink-0 mt-0.5" />
                                 <span>
                                     <strong>Fórmula:</strong> (Déficit Neto <em>{result.requerimiento_hidrico.deficit_acumulado_mm}mm</em>) ÷ 
                                     (Eficiencia <em>{result.requerimiento_hidrico.eficiencia_sistema}</em>) = 
-                                    <strong className="text-gray-600"> {result.recomendacion.riego_sugerido_mm} mm</strong> (Lo que debes bombear).
+                                    <strong className="text-gray-600"> {result.recomendacion.riego_sugerido_mm} mm</strong>.
+                                    <br/>
+                                    {result.recomendacion.total_plantas_calculadas 
+                                        ? `* Volumen calculado en base al área de copa para ${result.recomendacion.total_plantas_calculadas} plantas.` 
+                                        : '* Cultivo denso (calculado multiplicando lámina por área total de la Ha).'}
                                 </span>
                             </div>
                         </div>
@@ -307,4 +320,4 @@ export default function IrrigationProgramming() {
       )}
     </div>
   );
-} 
+}

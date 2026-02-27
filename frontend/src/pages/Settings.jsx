@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import { 
-  Settings as SettingsIcon, Save, Sliders, CloudRain, Droplets, Info 
+  Settings as SettingsIcon, Save, Sliders, CloudRain, Droplets, Info, TreePine
 } from 'lucide-react';
 
 export default function Settings() {
@@ -20,7 +20,8 @@ export default function Settings() {
     id: null,
     preferred_eto_method: '',
     effective_rain_method: '',
-    system_efficiency: 0.90
+    system_efficiency: 0.90,
+    experience_criterion: 80.0
   });
 
   useEffect(() => {
@@ -178,6 +179,15 @@ export default function Settings() {
               <strong> {(10 / formData.system_efficiency).toFixed(1)} mm</strong>.
             </p>
           </div>
+        </div>
+        {/* Criterio de experiencia*/}     
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 md:col-span-2">
+           <div className="flex items-center gap-3 mb-4"><div className="bg-emerald-100 p-2 rounded-lg text-emerald-600"><TreePine size={24} /></div><h3 className="text-lg font-bold text-gray-700">Criterio de Experiencia (Área de Sombra)</h3></div>
+           <p className="text-sm text-gray-500 mb-4">Define qué porcentaje de la distancia entre plantas ocupa el diámetro del cultivo. Este valor se usa para calcular los Litros por planta (Traslape).</p>
+           <div className="flex items-center gap-4">
+               <input type="number" step="1" min="1" max="200" value={formData.experience_criterion} onChange={(e) => setFormData({...formData, experience_criterion: parseFloat(e.target.value)})} className="w-32 p-3 border border-gray-300 rounded-lg text-xl font-bold text-center" />
+               <span className="text-gray-600 font-bold">% de la distancia</span>
+           </div>
         </div>
 
         {/* TARJETA 3: MÉTODO ETo (Select Dinámico) */}
