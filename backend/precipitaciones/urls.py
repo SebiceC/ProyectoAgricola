@@ -3,12 +3,14 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     StationViewSet,
     PrecipitationRecordListCreateView,
-    PrecipitationRecordDetailView
+    PrecipitationRecordDetailView,
+    PrecipitationStudyViewSet
 )
 
-# Usamos Router para las Estaciones porque ahora es un ViewSet (necesario para @action fetch_chirps)
+# Usamos Router para las Estaciones y Estudios
 router = DefaultRouter()
 router.register(r'stations', StationViewSet, basename='station')
+router.register(r'studies', PrecipitationStudyViewSet, basename='precipitation-study')
 
 urlpatterns = [
     # Incluye las rutas generadas por el router (api/precipitaciones/stations/...)

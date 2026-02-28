@@ -132,4 +132,110 @@ def get_precipitation_strictly_local(station, target_date):
             "Por favor sincronice o registre el dato manualmente."
         )
     
+    
     return record
+
+def get_historical_precipitation_on_the_fly(lat, lon, start_date, end_date):
+    """
+    MODO LECTURA "AL VUELO": Descarga datos de CHIRPS directamente y promedia
+    mensualmente sin guardar en la Base de Datos Histórica.
+    """
+    print(f"Generando Histórico de Lluvias Al Vuelo ({start_date} a {end_date})")
+    
+    # 1. Validación de Datos de Entrada
+    try:
+        f_lat = float(lat)
+        f_lon = float(lon)
+    except (ValueError, TypeError):
+        raise ValueError(f"Coordenadas corruptas: Lat: {lat}, Lon: {lon}")
+
+    # 2. Obtener datos crudos de CHIRPS
+    inicializar_earth_engine()
+    punto = ee.Geometry.Point([f_lon, f_lat])
+    ee_start = start_date.strftime('%Y-%m-%d')
+    ee_end = end_date.strftime('%Y-%m-%d')
+    
+    chirps = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY') \
+        .filterDate(ee_start, ee_end) \
+        .filterBounds(punto)
+
+    def extraer_dato(img):
+        date = img.date().format('YYYY-MM-dd')
+        value = img.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=punto,
+            scale=5000 
+        ).get('precipitation')
+        return ee.Feature(None, {'date': date, 'precipitation': value})
+
+    try:
+        data = chirps.map(extraer_dato).getInfo()
+    except Exception as e:
+        raise Exception(f"Error interno GEE: {e}")
+
+    # Diccionario para agrupar las lluvias diarias en totales mensuales por cada año
+    monthly_totals_by_year = {i: {} for i in range(1, 13)}
+
+    if 'features' in data:
+        for feature in data['features']:
+            props = feature['properties']
+            fecha_str = props.get('date')
+            precip_mm = props.get('precipitation')
+
+            if precip_mm is None or precip_mm < 0:
+                continue
+            
+            # Parse Date
+            try:
+                date_obj = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+                month_idx = date_obj.month
+                year_idx = date_obj.year
+                
+                if year_idx not in monthly_totals_by_year[month_idx]:
+                    monthly_totals_by_year[month_idx][year_idx] = 0.0
+                
+                monthly_totals_by_year[month_idx][year_idx] += float(precip_mm)
+            except:
+                continue
+
+    results = []
+    meses_nombres = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+        7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
+
+    for month_idx in range(1, 13):
+        year_totals = monthly_totals_by_year[month_idx]
+        num_years = len(year_totals)
+        
+        # El promedio CROPWAT es la suma de los totales de cada mes dividida 
+        # entre el número de años en los que se registró el mes.
+        if num_years > 0:
+            avg_monthly_mm = sum(year_totals.values()) / num_years
+        else:
+            avg_monthly_mm = 0.0
+
+        results.append({
+            "month": month_idx,
+            "month_name": meses_nombres[month_idx],
+            "precipitation": round(avg_monthly_mm, 2)
+        })
+
+    return results
+
+def get_historical_precipitation(station, start_date, end_date):
+    """
+    MODO LECTURA LEGACY: Genera datos buscando en BD local (OBSOLETO).
+    """
+    pass
+
+def sync_historical_to_daily_precip(station, lat, lon, start_date, end_date):
+    """
+    MODO ESCRITURA: Toma el rango de datos seleccionado de CHIRPS y lo inyecta 
+    en la tabla operativa PrecipitationRecords, respetando datos MANUALES.
+    """
+    print(f"💾 SINCRONIZANDO LLUVIAS A OPERACIÓN DIARIA ({station.name}): {start_date} a {end_date}")
+    
+    return obtener_y_guardar_precipitacion_diaria_rango(
+        station, lat, lon, start_date, end_date
+    )

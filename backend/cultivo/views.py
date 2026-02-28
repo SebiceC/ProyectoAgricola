@@ -81,22 +81,40 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 4. Configurar el "Tanque" del Suelo
         s = planting.soil
-        root_depth = 0.6 # Profundidad efectiva (m)
-        
         # Valores seguros (Fallback)
         cc_val = s.capacidad_campo or 25.0
         pmp_val = s.punto_marchitez or 12.0
         da_val = s.densidad_aparente or 1.2
+        p_val = planting.crop.agotam_critico or 0.5
         
-        # Límites en milímetros (Volumen de agua)
-        limit_cc = (cc_val / 100) * da_val * root_depth * 1000  # Tanque Lleno
-        limit_pmp = (pmp_val / 100) * da_val * root_depth * 1000 # Tanque Vacío
-        
-        tam = limit_cc - limit_pmp # Agua Útil Total
-        ram = tam * 0.5            # Agua Fácilmente Disponible (50% del útil)
-        limit_critical = limit_cc - ram # Umbral de Riego (Línea Naranja)
+        # Función auxiliar para calcular límites diarios basados en la profundidad radicular
+        def get_day_limits(date_eval):
+            crop = planting.crop
+            age_d = (date_eval - planting.fecha_siembra).days
+            if age_d < 0: age_d = 0
+            
+            d_ini = crop.etapa_inicial or 20
+            d_dev = crop.etapa_desarrollo or 30
+            
+            # Profundidades seguras (fallback si están en 0 o Null)
+            pr_ini = crop.prof_radicular_ini if crop.prof_radicular_ini else 0.3
+            pr_max = crop.prof_radicular_max if crop.prof_radicular_max else 1.0
+            
+            if age_d < d_ini:
+                rd = pr_ini
+            elif age_d < (d_ini + d_dev):
+                progress = (age_d - d_ini) / d_dev
+                rd = pr_ini + progress * (pr_max - pr_ini)
+            else:
+                rd = pr_max
+                
+            l_cc = (cc_val / 100) * da_val * rd * 1000  # Tanque Lleno
+            l_pmp = (pmp_val / 100) * da_val * rd * 1000 # Tanque Vacío
+            t_am = l_cc - l_pmp                            # Agua Útil
+            l_crit = l_cc - (t_am * p_val)                 # Umbral Crítico (p)
+            
+            return rd, l_cc, l_pmp, t_am, l_crit
 
         # 5. RECONSTRUCCIÓN HISTÓRICA (Loop de Memoria Estricto)
         today = date.today()
@@ -106,6 +124,7 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         irrigations = {i.date: i.water_volume_mm for i in planting.irrigations.filter(date__range=[start_date, today])}
 
         # Simulación Día a Día
+        rd, limit_cc, limit_pmp, tam, limit_critical = get_day_limits(start_date)
         current_water = limit_cc # Asumimos suelo lleno al inicio del periodo de simulación
         curr = start_date
         
@@ -118,6 +137,14 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         try:
             while curr < today:
                 
+                # A.0. Actualizar Límites Diarios (Crecimiento de Raíz)
+                new_rd, new_limit_cc, limit_pmp, tam, limit_critical = get_day_limits(curr)
+                # Si la raíz crece, asumimos que explora suelo a Capacidad de Campo
+                delta_cc = new_limit_cc - limit_cc
+                if delta_cc > 0:
+                    current_water += delta_cc
+                limit_cc = new_limit_cc
+
                 # A. OBTENER CLIMA (ESTRICTO LOCAL)
                 # Si falta el dato, 'get_weather_strictly_local' lanzará ObjectDoesNotExist
                 weather_record = get_weather_strictly_local(user, curr)
@@ -278,31 +305,59 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
         # Intentamos obtener la estación para graficar lluvias
         station = Station.objects.filter(user=request.user).first()
 
-        # 1. Definir los límites
-        root_depth = 0.6 
+        # 1. Definir los límites base
         cc_val = soil.capacidad_campo or 25.0
         pmp_val = soil.punto_marchitez or 12.0
         da_val = soil.densidad_aparente or 1.2
+        p_val = planting.crop.agotam_critico or 0.5
 
-        limit_cc = (cc_val / 100) * da_val * root_depth * 1000
-        limit_pmp = (pmp_val / 100) * da_val * root_depth * 1000
-        
-        tam = limit_cc - limit_pmp
-        limit_critical = limit_cc - (tam * 0.5)
+        def get_day_limits(date_eval):
+            crop = planting.crop
+            age_d = (date_eval - planting.fecha_siembra).days
+            if age_d < 0: age_d = 0
+            
+            d_ini = crop.etapa_inicial or 20
+            d_dev = crop.etapa_desarrollo or 30
+            
+            pr_ini = crop.prof_radicular_ini if crop.prof_radicular_ini else 0.3
+            pr_max = crop.prof_radicular_max if crop.prof_radicular_max else 1.0
+            
+            if age_d < d_ini:
+                rd = pr_ini
+            elif age_d < (d_ini + d_dev):
+                progress = (age_d - d_ini) / d_dev
+                rd = pr_ini + progress * (pr_max - pr_ini)
+            else:
+                rd = pr_max
+                
+            l_cc = (cc_val / 100) * da_val * rd * 1000
+            l_pmp = (pmp_val / 100) * da_val * rd * 1000
+            t_am = l_cc - l_pmp
+            l_crit = l_cc - (t_am * p_val)
+            
+            return rd, l_cc, l_pmp, t_am, l_crit
 
         # 2. Reconstruir Historia
-        history = []
-        current_water = limit_cc 
-        
         end_date = date.today()
         start_date = end_date - timedelta(days=30)
         
+        rd, limit_cc, limit_pmp, tam, limit_critical = get_day_limits(start_date)
+        current_water = limit_cc
+        history = []
+        
         irrigations = {i.date: i.water_volume_mm for i in planting.irrigations.filter(date__range=[start_date, end_date])}
 
-        delta = timedelta(days=1)
         curr = start_date
+        delta = timedelta(days=1)
 
         while curr <= end_date:
+            # 2.0 Crecimiento Radicular del día
+            new_rd, new_limit_cc, limit_pmp, tam, limit_critical = get_day_limits(curr)
+            delta_cc = new_limit_cc - limit_cc
+            if delta_cc > 0:
+                current_water += delta_cc
+            limit_cc = new_limit_cc
+            
             # NOTA: Para la gráfica histórica permitimos huecos (try/except silencioso)
             # para no romper toda la gráfica por un día faltante.
             

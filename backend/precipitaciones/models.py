@@ -74,3 +74,29 @@ class PrecipitationRecord(models.Model):
              self.effective_precipitation_mm = self.precipitation_mm
             
         super().save(*args, **kwargs)
+
+class PrecipitationStudy(models.Model):
+    """
+    Modelo para guardar instantáneas de análisis de lluvia histórica.
+    No afecta los datos en crudo diarios, sirve como reporte generado.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="precipitation_studies")
+    name = models.CharField(max_length=100, verbose_name="Nombre del Estudio")
+    
+    # Metadatos del análisis
+    station = models.ForeignKey(Station, on_delete=models.CASCADE, related_name="studies")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    
+    # Aquí guardamos TODO el resultado del cálculo (la lista de meses con promedios)
+    result_data = models.JSONField(verbose_name="Datos Calculados") 
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Estudio Pluviométrico"
+        verbose_name_plural = "Estudios Pluviométricos"
+
+    def __str__(self):
+        return f"{self.name} ({self.created_at.date()})"

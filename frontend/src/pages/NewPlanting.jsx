@@ -7,7 +7,7 @@ import { Sprout, Calendar, Map, ArrowRight, Save, Layers, Ruler, BarChart } from
 export default function NewPlanting() {
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [baseCrops, setBaseCrops] = useState([]);
   const [soils, setSoils] = useState([]);
   const [studies, setStudies] = useState([]); // 🟢 Para ETo histórico
@@ -17,10 +17,10 @@ export default function NewPlanting() {
   const [editingId, setEditingId] = useState(null);
 
   const [formData, setFormData] = useState({
-    crop: '',        
-    nombre: '',      
+    crop: '',
+    nombre: '',
     fecha_siembra: '',
-    area: '',        
+    area: '',
     municipio: 'Neiva',
     soil: '',
     // 🟢 CAMPOS DE GEOMETRÍA Y CONFIGURACIÓN
@@ -37,38 +37,38 @@ export default function NewPlanting() {
 
   const loadInitialData = async () => {
     try {
-        const [cropsRes, soilsRes, studiesRes] = await Promise.all([
-            api.get('/cultivo/crops/'),
-            api.get('/suelo/soils/'),
-            api.get('/studies/') // 🟢 Cargar estudios guardados
-        ]);
-        setBaseCrops(cropsRes.data);
-        setSoils(soilsRes.data);
-        setStudies(studiesRes.data);
+      const [cropsRes, soilsRes, studiesRes] = await Promise.all([
+        api.get('/cultivo/crops/'),
+        api.get('/suelo/soils/'),
+        api.get('/studies/') // 🟢 Cargar estudios guardados
+      ]);
+      setBaseCrops(cropsRes.data);
+      setSoils(soilsRes.data);
+      setStudies(studiesRes.data);
 
-        if (location.state && location.state.plantingToEdit) {
-            const p = location.state.plantingToEdit;
-            setEditMode(true);
-            setEditingId(p.id);
-            setFormData({
-                crop: p.crop,
-                nombre: p.nombre_identificativo || '',
-                fecha_siembra: p.fecha_siembra,
-                area: p.area,
-                municipio: p.ubicacion || 'Neiva',
-                soil: p.soil || '',
-                distancia_surcos: p.distancia_surcos || '',
-                distancia_plantas: p.distancia_plantas || '',
-                manual_canopy_diameter: p.manual_canopy_diameter || '',
-                eto_source: p.eto_source || 'DAILY',
-                historical_study: p.historical_study || ''
-            });
-            toast("Modo Edición Activado", { icon: '✏️' });
-        }
+      if (location.state && location.state.plantingToEdit) {
+        const p = location.state.plantingToEdit;
+        setEditMode(true);
+        setEditingId(p.id);
+        setFormData({
+          crop: p.crop,
+          nombre: p.nombre_identificativo || '',
+          fecha_siembra: p.fecha_siembra,
+          area: p.area,
+          municipio: p.ubicacion || 'Neiva',
+          soil: p.soil || '',
+          distancia_surcos: p.distancia_surcos || '',
+          distancia_plantas: p.distancia_plantas || '',
+          manual_canopy_diameter: p.manual_canopy_diameter || '',
+          eto_source: p.eto_source || 'DAILY',
+          historical_study: p.historical_study || ''
+        });
+        toast("Modo Edición Activado", { icon: '✏️' });
+      }
     } catch (error) {
-        toast.error("Error cargando datos del sistema");
+      toast.error("Error cargando datos del sistema");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -77,15 +77,26 @@ export default function NewPlanting() {
     const s = parseFloat(formData.distancia_surcos);
     const p = parseFloat(formData.distancia_plantas);
     const a = parseFloat(formData.area);
-    if(s > 0 && p > 0 && a > 0) return Math.round((10000 / (s * p)) * a);
-    return 0;
+    if (s > 0 && p > 0 && a > 0) return Math.round((10000 / (s * p)) * a);
+    return 0; // Return safe default
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.crop) return toast.error("Selecciona un cultivo");
     if (!formData.soil) return toast.error("Debes asignar un tipo de suelo");
-    if (formData.eto_source === 'HISTORICAL' && !formData.historical_study) return toast.error("Debes seleccionar un estudio histórico");
+
+    // 🟢 QA FIX: Validación visual del estudio histórico
+    if (formData.eto_source === 'HISTORICAL' && !formData.historical_study) {
+      return toast.error("Por favor seleccione de la lista de estudios históricos");
+    }
+
+    // 🟢 QA FIX: Division by zero constraint alert
+    const surc = parseFloat(formData.distancia_surcos);
+    const plant = parseFloat(formData.distancia_plantas);
+    if ((surc === 0 || plant === 0) || (surc < 0 || plant < 0)) {
+      return toast.error("Las distancias geométricas no pueden ser cero o negativas");
+    }
 
     const selectedCropData = baseCrops.find(c => c.id === parseInt(formData.crop));
     if (!selectedCropData) return toast.error("Datos del cultivo base no encontrados");
@@ -93,8 +104,8 @@ export default function NewPlanting() {
     setSaving(true);
     try {
       const payload = {
-        crop: formData.crop,            
-        nombre: formData.nombre,        
+        crop: formData.crop,
+        nombre: formData.nombre,
         fecha_siembra: formData.fecha_siembra,
         area: parseFloat(formData.area),
         ubicacion: formData.municipio,
@@ -105,7 +116,7 @@ export default function NewPlanting() {
         manual_canopy_diameter: parseFloat(formData.manual_canopy_diameter) || null,
         eto_source: formData.eto_source,
         historical_study: formData.historical_study || null,
-        
+
         // Datos Técnicos
         kc_inicial: selectedCropData.kc_inicial,
         kc_medio: selectedCropData.kc_medio,
@@ -122,11 +133,11 @@ export default function NewPlanting() {
       };
 
       if (editMode) {
-          await api.patch(`/cultivo/plantings/${editingId}/`, payload);
-          toast.success('Siembra actualizada correctamente');
+        await api.patch(`/cultivo/plantings/${editingId}/`, payload);
+        toast.success('Siembra actualizada correctamente');
       } else {
-          await api.post('/cultivo/plantings/', payload);
-          toast.success('¡Siembra registrada exitosamente!');
+        await api.post('/cultivo/plantings/', payload);
+        toast.success('¡Siembra registrada exitosamente!');
       }
       navigate('/home/mis-cultivos');
     } catch (error) {
@@ -153,51 +164,51 @@ export default function NewPlanting() {
         <div className="h-2 bg-agri-green w-full"></div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          
+
           {/* SELECCIÓN DE CULTIVO Y SUELO */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Cultivo Base (FAO)</label>
-                <div className="relative">
-                    <select
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white"
-                    value={formData.crop}
-                    onChange={(e) => setFormData({...formData, crop: e.target.value})}
-                    required
-                    disabled={loading}
-                    >
-                    <option value="">-- Selecciona --</option>
-                    {baseCrops.map((c) => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                    ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
-                    <ArrowRight size={16} className="rotate-90" />
-                    </div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Cultivo Base (FAO)</label>
+              <div className="relative">
+                <select
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none appearance-none bg-white"
+                  value={formData.crop}
+                  onChange={(e) => setFormData({ ...formData, crop: e.target.value })}
+                  required
+                  disabled={loading}
+                >
+                  <option value="">-- Selecciona --</option>
+                  {baseCrops.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+                  <ArrowRight size={16} className="rotate-90" />
                 </div>
+              </div>
             </div>
 
             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    <Layers size={18} className="text-amber-600"/> Tipo de Suelo
-                </label>
-                <div className="relative">
-                    <select
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none appearance-none bg-white"
-                    value={formData.soil}
-                    onChange={(e) => setFormData({...formData, soil: e.target.value})}
-                    required
-                    disabled={loading}
-                    >
-                    <option value="">-- Selecciona --</option>
-                    {soils.map((s) => (
-                        <option key={s.id} value={s.id}>{s.nombre} ({s.textura})</option>
-                    ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
-                    <ArrowRight size={16} className="rotate-90" />
-                    </div>
+              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                <Layers size={18} className="text-amber-600" /> Tipo de Suelo
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none appearance-none bg-white"
+                  value={formData.soil}
+                  onChange={(e) => setFormData({ ...formData, soil: e.target.value })}
+                  required
+                  disabled={loading}
+                >
+                  <option value="">-- Selecciona --</option>
+                  {soils.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre} ({s.textura})</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+                  <ArrowRight size={16} className="rotate-90" />
                 </div>
+              </div>
             </div>
           </div>
 
@@ -205,11 +216,11 @@ export default function NewPlanting() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Nombre Identificador</label>
-              <input type="text" placeholder="Ej: Lote Maíz Sur" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} required />
+              <input type="text" placeholder="Ej: Lote Maíz Sur" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} required />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Ubicación</label>
-              <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" value={formData.municipio} onChange={(e) => setFormData({...formData, municipio: e.target.value})} />
+              <input type="text" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none" value={formData.municipio} onChange={(e) => setFormData({ ...formData, municipio: e.target.value })} />
             </div>
           </div>
 
@@ -217,101 +228,101 @@ export default function NewPlanting() {
 
           {/* 🟢 SECCIÓN: FUENTE DE ETO */}
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-             <h3 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
-                 <BarChart size={18}/> Fuente de Datos de Evapotranspiración (ETo)
-             </h3>
-             <div className="flex flex-col md:flex-row gap-6 mb-4">
-                 <label className="flex items-center gap-2 cursor-pointer">
-                     <input type="radio" checked={formData.eto_source === 'DAILY'} onChange={() => setFormData({...formData, eto_source: 'DAILY'})} className="accent-blue-600" />
-                     <span className="text-sm font-bold text-gray-700">Operación Diaria (NASA/Sensores)</span>
-                 </label>
-                 <label className="flex items-center gap-2 cursor-pointer">
-                     <input type="radio" checked={formData.eto_source === 'HISTORICAL'} onChange={() => setFormData({...formData, eto_source: 'HISTORICAL'})} className="accent-blue-600" />
-                     <span className="text-sm font-bold text-gray-700">Promedio Histórico</span>
-                 </label>
-             </div>
-             
-             {formData.eto_source === 'HISTORICAL' && (
-                 <div className="animate-in fade-in">
-                     <select 
-                        className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
-                        value={formData.historical_study} 
-                        onChange={e => setFormData({...formData, historical_study: e.target.value})}
-                     >
-                         <option value="">-- Seleccione un Estudio Guardado en su Biblioteca --</option>
-                         {studies.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_date} / {s.end_date})</option>)}
-                     </select>
-                 </div>
-             )}
+            <h3 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
+              <BarChart size={18} /> Fuente de Datos de Evapotranspiración (ETo)
+            </h3>
+            <div className="flex flex-col md:flex-row gap-6 mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={formData.eto_source === 'DAILY'} onChange={() => setFormData({ ...formData, eto_source: 'DAILY' })} className="accent-blue-600" />
+                <span className="text-sm font-bold text-gray-700">Operación Diaria (NASA/Sensores)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={formData.eto_source === 'HISTORICAL'} onChange={() => setFormData({ ...formData, eto_source: 'HISTORICAL' })} className="accent-blue-600" />
+                <span className="text-sm font-bold text-gray-700">Promedio Histórico</span>
+              </label>
+            </div>
+
+            {formData.eto_source === 'HISTORICAL' && (
+              <div className="animate-in fade-in">
+                <select
+                  className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={formData.historical_study}
+                  onChange={e => setFormData({ ...formData, historical_study: e.target.value })}
+                >
+                  <option value="">-- Seleccione un Estudio Guardado en su Biblioteca --</option>
+                  {studies.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_date} / {s.end_date})</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* SECCIÓN DE GEOMETRÍA Y ÁREA */}
           <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-              <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-sm font-bold text-green-800 flex items-center gap-2">
-                      <Ruler size={18}/> Geometría de Siembra
-                  </h3>
-                  <span className="bg-green-200 text-green-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                      {calcularPlantas() > 0 ? `${calcularPlantas().toLocaleString()} Plantas Estimadas` : 'Cultivo Denso'}
-                  </span>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div>
-                      <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Área Total (Ha)</label>
-                      <input
-                          type="number" step="0.01" placeholder="0.00"
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                          value={formData.area}
-                          onChange={(e) => setFormData({...formData, area: e.target.value})}
-                          required
-                      />
-                  </div>
-                  <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                          <Calendar size={18} className="text-blue-500"/> Fecha de Siembra
-                      </label>
-                      <input
-                          type="date"
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
-                          value={formData.fecha_siembra}
-                          onChange={(e) => setFormData({...formData, fecha_siembra: e.target.value})}
-                          required
-                      />
-                  </div>
-              </div>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-green-800 flex items-center gap-2">
+                <Ruler size={18} /> Geometría de Siembra
+              </h3>
+              <span className="bg-green-200 text-green-900 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                {calcularPlantas() > 0 ? `${calcularPlantas().toLocaleString()} Plantas Estimadas` : 'Cultivo Denso'}
+              </span>
+            </div>
 
-              {/* 🟢 DISTANCIAS Y DIÁMETRO OPCIONAL (Modificado a Grid 2x2 para encajar limpio) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Dist. Surcos (m)</label>
-                    <input
-                        type="number" step="0.01" placeholder="Ej: 0.8"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                        value={formData.distancia_surcos}
-                        onChange={(e) => setFormData({...formData, distancia_surcos: e.target.value})}
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Dist. Plantas (m)</label>
-                    <input
-                        type="number" step="0.01" placeholder="Ej: 0.3"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
-                        value={formData.distancia_plantas}
-                        onChange={(e) => setFormData({...formData, distancia_plantas: e.target.value})}
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-amber-600 mb-1 uppercase">Diámetro de Sombra</label>
-                    <input
-                        type="number" step="0.01" placeholder="Opcional (Ej: 2.5)"
-                        title="Deje vacío para que el sistema lo calcule usando el criterio de experiencia"
-                        className="w-full p-3 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none bg-amber-50/50"
-                        value={formData.manual_canopy_diameter}
-                        onChange={(e) => setFormData({...formData, manual_canopy_diameter: e.target.value})}
-                    />
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Área Total (Ha)</label>
+                <input
+                  type="number" step="0.01" min="0.01" placeholder="0.00"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  value={formData.area}
+                  onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                  required
+                />
               </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                  <Calendar size={18} className="text-blue-500" /> Fecha de Siembra
+                </label>
+                <input
+                  type="date"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                  value={formData.fecha_siembra}
+                  onChange={(e) => setFormData({ ...formData, fecha_siembra: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* 🟢 DISTANCIAS Y DIÁMETRO OPCIONAL (Modificado a Grid 2x2 para encajar limpio) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Dist. Surcos (m)</label>
+                <input
+                  type="number" step="0.01" min="0" placeholder="Ej: 0.8"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  value={formData.distancia_surcos}
+                  onChange={(e) => setFormData({ ...formData, distancia_surcos: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Dist. Plantas (m)</label>
+                <input
+                  type="number" step="0.01" min="0" placeholder="Ej: 0.3"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                  value={formData.distancia_plantas}
+                  onChange={(e) => setFormData({ ...formData, distancia_plantas: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-amber-600 mb-1 uppercase">Diámetro de Sombra</label>
+                <input
+                  type="number" step="0.01" min="0" placeholder="Opcional (Ej: 2.5)"
+                  title="Deje vacío para que el sistema lo calcule usando el criterio de experiencia"
+                  className="w-full p-3 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none bg-amber-50/50"
+                  value={formData.manual_canopy_diameter}
+                  onChange={(e) => setFormData({ ...formData, manual_canopy_diameter: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
 
           <button

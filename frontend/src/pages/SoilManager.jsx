@@ -8,15 +8,15 @@ export default function SoilManager() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  
+
   // 🟢 NUEVO: Controlar si es textura personalizada
   const [isCustomTexture, setIsCustomTexture] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: '',
     textura: '',
-    capacidad_campo: '',      
-    punto_marchitez: '',      
+    capacidad_campo: '',
+    punto_marchitez: '',
     densidad_aparente: '1.2',
     tasa_max_infiltracion: '',
     profundidad_radicular_max: '1.5'
@@ -35,7 +35,7 @@ export default function SoilManager() {
 
   const fetchSoils = async () => {
     try {
-      const res = await api.get('/suelo/soils/'); 
+      const res = await api.get('/suelo/soils/');
       setSoils(res.data);
     } catch (error) {
       if (error.response?.status !== 404) toast.error('Error cargando suelos');
@@ -45,49 +45,49 @@ export default function SoilManager() {
   };
 
   const handleEdit = (soil) => {
-      // Verificar si la textura actual está en los presets
-      const isCustom = !texturePresets[soil.textura];
-      setIsCustomTexture(isCustom);
+    // Verificar si la textura actual está en los presets
+    const isCustom = !texturePresets[soil.textura];
+    setIsCustomTexture(isCustom);
 
-      setFormData({
-          nombre: soil.nombre,
-          textura: soil.textura,
-          capacidad_campo: soil.capacidad_campo,
-          punto_marchitez: soil.punto_marchitez,
-          densidad_aparente: soil.densidad_aparente,
-          tasa_max_infiltracion: soil.tasa_max_infiltracion,
-          profundidad_radicular_max: soil.profundidad_radicular_max
-      });
-      setEditingId(soil.id);
-      setShowForm(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    setFormData({
+      nombre: soil.nombre,
+      textura: soil.textura,
+      capacidad_campo: soil.capacidad_campo,
+      punto_marchitez: soil.punto_marchitez,
+      densidad_aparente: soil.densidad_aparente,
+      tasa_max_infiltracion: soil.tasa_max_infiltracion,
+      profundidad_radicular_max: soil.profundidad_radicular_max
+    });
+    setEditingId(soil.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleTextureChange = (e) => {
     const value = e.target.value;
-    
+
     // 🟢 Lógica para textura personalizada
     if (value === 'custom') {
-        setIsCustomTexture(true);
-        setFormData(prev => ({
-            ...prev,
-            textura: '', // Limpiamos para que el usuario escriba
-            // Mantenemos los valores actuales o los limpiamos según prefieras.
-            // Aquí los dejo para que el usuario los ajuste manualmente.
-        }));
+      setIsCustomTexture(true);
+      setFormData(prev => ({
+        ...prev,
+        textura: '', // Limpiamos para que el usuario escriba
+        // Mantenemos los valores actuales o los limpiamos según prefieras.
+        // Aquí los dejo para que el usuario los ajuste manualmente.
+      }));
     } else {
-        setIsCustomTexture(false);
-        const preset = texturePresets[value];
-        if (preset) {
-            setFormData(prev => ({
-                ...prev,
-                textura: value,
-                capacidad_campo: preset.cc,
-                punto_marchitez: preset.pmp,
-                densidad_aparente: preset.da,
-                tasa_max_infiltracion: preset.inf,
-            }));
-        }
+      setIsCustomTexture(false);
+      const preset = texturePresets[value];
+      if (preset) {
+        setFormData(prev => ({
+          ...prev,
+          textura: value,
+          capacidad_campo: preset.cc,
+          punto_marchitez: preset.pmp,
+          densidad_aparente: preset.da,
+          tasa_max_infiltracion: preset.inf,
+        }));
+      }
     }
   };
 
@@ -96,6 +96,17 @@ export default function SoilManager() {
     try {
       const cc = parseFloat(formData.capacidad_campo);
       const pmp = parseFloat(formData.punto_marchitez);
+
+      // 🟢 QA FIX: Evitar incongruencia física (Agua de Marchitez > Agua Máxima)
+      if (pmp >= cc) {
+        return toast.error("El Punto de Marchitez (PMP) debe ser menor a la Capacidad de Campo (CC)");
+      }
+
+      // 🟢 QA FIX: Evitar que guarden una textura personalizada en blanco
+      if (isCustomTexture && formData.textura.trim() === '') {
+        return toast.error("Debe escribir un nombre para la textura personalizada");
+      }
+
       const humedadDisponible = (cc - pmp).toFixed(2);
 
       const payload = {
@@ -110,28 +121,28 @@ export default function SoilManager() {
       };
 
       if (editingId) {
-          await api.patch(`/suelo/soils/${editingId}/`, payload);
-          toast.success('Suelo actualizado correctamente');
+        await api.patch(`/suelo/soils/${editingId}/`, payload);
+        toast.success('Suelo actualizado correctamente');
       } else {
-          await api.post('/suelo/soils/', payload);
-          toast.success('Suelo registrado correctamente');
+        await api.post('/suelo/soils/', payload);
+        toast.success('Suelo registrado correctamente');
       }
 
       setShowForm(false);
       setEditingId(null);
       setIsCustomTexture(false); // Resetear estado custom
-      setFormData({ 
-        nombre: '', textura: '', capacidad_campo: '', punto_marchitez: '', 
-        densidad_aparente: '1.2', tasa_max_infiltracion: '', profundidad_radicular_max: '1.5' 
+      setFormData({
+        nombre: '', textura: '', capacidad_campo: '', punto_marchitez: '',
+        densidad_aparente: '1.2', tasa_max_infiltracion: '', profundidad_radicular_max: '1.5'
       });
-      fetchSoils(); 
+      fetchSoils();
     } catch (error) {
       toast.error('Error al guardar el suelo.');
     }
   };
 
   const handleDelete = async (id) => {
-    if(!window.confirm("¿Seguro que deseas eliminar este suelo?")) return;
+    if (!window.confirm("¿Seguro que deseas eliminar este suelo?")) return;
     try {
       await api.delete(`/suelo/soils/${id}/`);
       toast.success("Suelo eliminado");
@@ -153,12 +164,12 @@ export default function SoilManager() {
           </h1>
           <p className="text-gray-500">Configura las propiedades hidrodinámicas.</p>
         </div>
-        <button 
+        <button
           onClick={() => {
-              setShowForm(!showForm);
-              setEditingId(null);
-              setIsCustomTexture(false);
-              setFormData({ nombre: '', textura: '', capacidad_campo: '', punto_marchitez: '', densidad_aparente: '1.2', tasa_max_infiltracion: '', profundidad_radicular_max: '1.5' });
+            setShowForm(!showForm);
+            setEditingId(null);
+            setIsCustomTexture(false);
+            setFormData({ nombre: '', textura: '', capacidad_campo: '', punto_marchitez: '', densidad_aparente: '1.2', tasa_max_infiltracion: '', profundidad_radicular_max: '1.5' });
           }}
           className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2 shadow-sm font-bold"
         >
@@ -169,80 +180,80 @@ export default function SoilManager() {
       {showForm && (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-amber-100 mb-8 animate-fade-in-down">
           <h3 className="font-bold text-gray-800 mb-4 border-b pb-2">
-              {editingId ? 'Editar Suelo' : 'Registrar Nuevo Suelo'}
+            {editingId ? 'Editar Suelo' : 'Registrar Nuevo Suelo'}
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
+
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre</label>
-                <input type="text" required placeholder="Ej: Lote Sur" className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} />
+                <input type="text" required placeholder="Ej: Lote Sur" className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} />
               </div>
-              
+
               {/* 🟢 SELECTOR DE TEXTURA MEJORADO */}
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Textura</label>
                 {!isCustomTexture ? (
-                    <select 
-                        className="w-full p-2 border rounded bg-white focus:ring-2 focus:ring-amber-500 outline-none" 
-                        value={formData.textura} 
-                        onChange={handleTextureChange} 
-                        required
-                    >
-                      <option value="">-- Seleccionar --</option>
-                      {Object.keys(texturePresets).map(t => <option key={t} value={t}>{t}</option>)}
-                      <option value="custom" className="font-bold text-amber-600">+ Otra / Personalizada</option>
-                    </select>
+                  <select
+                    className="w-full p-2 border rounded bg-white focus:ring-2 focus:ring-amber-500 outline-none"
+                    value={formData.textura}
+                    onChange={handleTextureChange}
+                    required
+                  >
+                    <option value="">-- Seleccionar --</option>
+                    {Object.keys(texturePresets).map(t => <option key={t} value={t}>{t}</option>)}
+                    <option value="custom" className="font-bold text-amber-600">+ Otra / Personalizada</option>
+                  </select>
                 ) : (
-                    <div className="flex gap-2">
-                        <input 
-                            type="text" 
-                            autoFocus
-                            placeholder="Escribe el nombre de la textura..." 
-                            className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none border-amber-300 bg-amber-50" 
-                            value={formData.textura} 
-                            onChange={e => setFormData({...formData, textura: e.target.value})}
-                            required
-                        />
-                        <button 
-                            type="button" 
-                            onClick={() => setIsCustomTexture(false)}
-                            className="px-3 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 text-gray-600"
-                            title="Volver a lista"
-                        >
-                            Lista
-                        </button>
-                    </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Escribe el nombre de la textura..."
+                      className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none border-amber-300 bg-amber-50"
+                      value={formData.textura}
+                      onChange={e => setFormData({ ...formData, textura: e.target.value })}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomTexture(false)}
+                      className="px-3 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 text-gray-600"
+                      title="Volver a lista"
+                    >
+                      Lista
+                    </button>
+                  </div>
                 )}
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Profundidad Suelo (m)</label>
-                <input type="number" step="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.profundidad_radicular_max} onChange={e => setFormData({...formData, profundidad_radicular_max: e.target.value})} />
+                <input type="number" step="0.1" min="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.profundidad_radicular_max} onChange={e => setFormData({ ...formData, profundidad_radicular_max: e.target.value })} />
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Capacidad Campo (CC)</label>
-                <input type="number" step="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.capacidad_campo} onChange={e => setFormData({...formData, capacidad_campo: e.target.value})} />
+                <input type="number" step="0.1" min="0" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.capacidad_campo} onChange={e => setFormData({ ...formData, capacidad_campo: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Punto Marchitez (PMP)</label>
-                <input type="number" step="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.punto_marchitez} onChange={e => setFormData({...formData, punto_marchitez: e.target.value})} />
+                <input type="number" step="0.1" min="0" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.punto_marchitez} onChange={e => setFormData({ ...formData, punto_marchitez: e.target.value })} />
               </div>
             </div>
 
             <div className="space-y-4 flex flex-col justify-between">
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Densidad (Da)</label>
-                <input type="number" step="0.01" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.densidad_aparente} onChange={e => setFormData({...formData, densidad_aparente: e.target.value})} />
+                <input type="number" step="0.01" min="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.densidad_aparente} onChange={e => setFormData({ ...formData, densidad_aparente: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Infiltración (mm/h)</label>
-                <input type="number" step="0.1" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.tasa_max_infiltracion} onChange={e => setFormData({...formData, tasa_max_infiltracion: e.target.value})} />
+                <input type="number" step="0.1" min="0" required className="w-full p-2 border rounded focus:ring-2 focus:ring-amber-500 outline-none" value={formData.tasa_max_infiltracion} onChange={e => setFormData({ ...formData, tasa_max_infiltracion: e.target.value })} />
               </div>
-              
+
               <button type="submit" className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded shadow transition-colors flex justify-center items-center gap-2 mt-4">
                 <Save size={18} /> {editingId ? 'Actualizar' : 'Guardar'}
               </button>
@@ -267,14 +278,14 @@ export default function SoilManager() {
                 {soil.textura}
               </span>
             </div>
-            
+
             <div className="p-5">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-blue-50 rounded-full text-blue-500"><Droplets size={24} /></div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-bold">Agua Útil</p>
                   <p className="text-xl font-bold text-gray-800">
-                    {soil.humedad_disponible || (soil.capacidad_campo - soil.punto_marchitez).toFixed(1)} 
+                    {soil.humedad_disponible || (soil.capacidad_campo - soil.punto_marchitez).toFixed(1)}
                     <span className="text-xs text-gray-400 font-normal"> %</span>
                   </p>
                 </div>
@@ -286,7 +297,7 @@ export default function SoilManager() {
             </div>
 
             <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
-              <button 
+              <button
                 onClick={() => handleEdit(soil)}
                 className="text-gray-500 hover:text-amber-700 text-sm font-medium flex items-center gap-1 transition-colors"
               >

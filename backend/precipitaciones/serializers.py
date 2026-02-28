@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Station, PrecipitationRecord
+from .models import Station, PrecipitationRecord, PrecipitationStudy
 
 class StationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -31,3 +31,9 @@ class PrecipitationRecordSerializer(serializers.ModelSerializer):
 # NOTA: He eliminado 'CargarPrecipitacionInputSerializer' y 'PrecipitacionDiariaRangoInputSerializer'
 # temporalmente porque dependían de la lógica vieja (year/month). 
 # Si necesitas carga masiva, debemos reescribirlos para soportar fechas exactas.
+
+class PrecipitationStudySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PrecipitationStudy
+        fields = '__all__'
+        read_only_fields = ('user', 'created_at')

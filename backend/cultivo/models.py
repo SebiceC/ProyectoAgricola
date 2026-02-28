@@ -54,8 +54,17 @@ class CropToPlant(models.Model):
     distancia_surcos = models.FloatField(help_text="Distancia entre surcos/hileras (metros)", null=True, blank=True)
     distancia_plantas = models.FloatField(help_text="Distancia entre plantas (metros)", null=True, blank=True)
 
-    # Campo calculado (Solo lectura para el usuario, calculado por el sistema)
+    # Campos calculados (Solo lectura para el usuario, calculados por el sistema)
     densidad_calculada = models.FloatField(help_text="Plantas por Hectárea", null=True, blank=True, editable=False)
+
+    # Campos de Operación Diaria vs Históricos (Añadidos en la migración 0005)
+    ETO_SOURCES = [
+        ('DAILY', 'Operación Diaria (Tiempo Real)'),
+        ('HISTORICAL', 'Estudio Histórico')
+    ]
+    eto_source = models.CharField(max_length=20, choices=ETO_SOURCES, default='DAILY')
+    historical_study = models.ForeignKey('climate_and_eto.ClimateStudy', on_delete=models.SET_NULL, null=True, blank=True)
+    manual_canopy_diameter = models.FloatField(help_text='Diámetro de copa manual (m)', null=True, blank=True)
 
     activo = models.BooleanField(default=True)
 
