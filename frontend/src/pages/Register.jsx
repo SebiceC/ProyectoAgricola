@@ -8,9 +8,11 @@ export default function Register() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState({
-    username: '', // Requerido por tu schema
+    username: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -18,7 +20,7 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validaciones básicas frontend
     if (formData.password !== formData.confirmPassword) {
       return toast.error('Las contraseñas no coinciden');
@@ -32,6 +34,7 @@ export default function Register() {
       // Endpoint según schema.yaml: /api/users/register/
       await api.post('/users/register/', {
         username: formData.username,
+        name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
         password: formData.password
         // Role no se envía, el backend asigna por defecto
@@ -41,9 +44,9 @@ export default function Register() {
       navigate('/login');
     } catch (error) {
       console.error(error);
-      const errorMsg = error.response?.data?.username ? 'El nombre de usuario ya existe' : 
-                       error.response?.data?.email ? 'El email ya está registrado' : 
-                       'Error al registrarse';
+      const errorMsg = error.response?.data?.username ? 'El nombre de usuario ya existe' :
+        error.response?.data?.email ? 'El email ya está registrado' :
+          'Error al registrarse';
       toast.error(errorMsg);
     } finally {
       setLoading(false);
@@ -61,16 +64,44 @@ export default function Register() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* USERNAME */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Usuario</label>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Nombre de Usuario</label>
             <div className="relative">
               <User className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <input
                 type="text"
                 required
                 className="w-full pl-9 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
-                placeholder="Nombre de usuario"
+                placeholder="Ej: juan123"
                 value={formData.username}
-                onChange={(e) => setFormData({...formData, username: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            {/* FIRST NAME */}
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Nombre</label>
+              <input
+                type="text"
+                required
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
+                placeholder="Juan"
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              />
+            </div>
+
+            {/* LAST NAME */}
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">Apellido</label>
+              <input
+                type="text"
+                required
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
+                placeholder="Pérez"
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
               />
             </div>
           </div>
@@ -86,7 +117,7 @@ export default function Register() {
                 className="w-full pl-9 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
                 placeholder="tu@email.com"
                 value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
             </div>
           </div>
@@ -102,7 +133,7 @@ export default function Register() {
                 className="w-full pl-9 pr-9 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
                 placeholder="Mínimo 6 caracteres"
                 value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               />
               <button
                 type="button"
@@ -125,7 +156,7 @@ export default function Register() {
                 className="w-full pl-9 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-agri-green outline-none"
                 placeholder="Repite la contraseña"
                 value={formData.confirmPassword}
-                onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               />
             </div>
           </div>

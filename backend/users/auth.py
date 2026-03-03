@@ -49,6 +49,7 @@ class CustomUserLoginView(GenericAPIView):
                 "token": token.key,
                 "user_id": user.id,
                 "email": user.email,
+                "roles": list(user.groups.values_list('name', flat=True)),
             }, status=status.HTTP_200_OK)
 
         return Response(

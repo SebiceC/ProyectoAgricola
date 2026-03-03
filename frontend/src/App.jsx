@@ -9,15 +9,16 @@ import DashboardLayout from './layouts/DashboardLayout';
 import Home from './pages/Home';
 import NewPlanting from './pages/NewPlanting';
 import SoilManager from './pages/SoilManager';
-import MyCrops from './pages/MyCrops'; 
+import MyCrops from './pages/MyCrops';
 import ClimateEto from './pages/ClimateEto';
 import IrrigationProgramming from './pages/IrrigationProgramming';
 import PrecipitationManager from './pages/PrecipitationManager';
 import Settings from './pages/Settings';
-import ForgotPassword from './pages/ForgotPassword'; 
+import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Profile from './pages/Profile';
 import CropManager from './pages/CropManager';
+import AdminPanel from './pages/AdminPanel';
 
 // components
 import SessionExpiredModal from './components/SessionExpiredModal';
@@ -25,7 +26,7 @@ import SessionExpiredModal from './components/SessionExpiredModal';
 // Protección de Rutas
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div>Cargando...</div>; 
+  if (loading) return <div>Cargando...</div>;
   return user ? children : <Navigate to="/login" />;
 };
 
@@ -34,7 +35,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="top-right" />
-        
+
         {/* 🟢 CORRECCIÓN 1: Agregar el Modal aquí para que exista en la app */}
         <SessionExpiredModal />
 
@@ -45,10 +46,10 @@ function App() {
 
           {/* 🟢 NUEVAS RUTAS DE RECUPERACIÓN */}
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          
+
           {/* Esta es la ruta a la que llegará el link del correo */}
           <Route path="/password/reset/confirm/:uid/:token" element={<ResetPassword />} />
-          
+
           {/* RUTAS PROTEGIDAS (Layout Principal) */}
           <Route path="/home" element={
             <PrivateRoute>
@@ -57,7 +58,7 @@ function App() {
           }>
             {/* Index: La vista Home con tarjetas */}
             <Route index element={<Home />} />
-            
+
             {/* Sub-rutas funcionales */}
             <Route path="mis-cultivos" element={<MyCrops />} />
             <Route path="nuevo-cultivo" element={<NewPlanting />} />
@@ -68,14 +69,15 @@ function App() {
             <Route path="riego" element={<IrrigationProgramming />} />
             <Route path="mi-perfil" element={<Profile />} />
             {/* 🟢 CORRECCIÓN 2: Registrar la ruta de Configuración */}
-            
+
             <Route path="settings" element={<Settings />} />
+            <Route path="admin" element={<AdminPanel />} />
 
           </Route>
 
           {/* Redirecciones por defecto */}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          
+
           {/* Catch-all: Si la ruta no existe, manda al login */}
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

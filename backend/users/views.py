@@ -18,7 +18,7 @@ class CustomUserListView(ListAPIView):
     serializer_class = CustomUserSerializer
     queryset = CustomUser.objects.all()
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminGroup]
     
 
 class CustomUserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
@@ -26,7 +26,7 @@ class CustomUserRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = CustomUserSerializer
     queryset = CustomUser.objects.all()
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminGroup]
 
 class AssignRoleView(APIView):
     authentication_classes = [TokenAuthentication]

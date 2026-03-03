@@ -27,12 +27,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     #Esquema de OpenAPI(JSON)
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    #Documentacion en swagger UI
+    # Documentacion en swagger UI
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    # Rutas de autenticación Djoser (Registro, Claves, Activación)
-    path('api/auth/', include('djoser.urls')),
-    # Rutas de Token (Login/Logout)
-    path('api/auth/', include('djoser.urls.authtoken')),
+    
     #endpoints de API
     path("api/", include("users.urls")),
     path("api/", include("climate_and_eto.urls")),
