@@ -28,7 +28,8 @@ export default function NewPlanting() {
     distancia_plantas: '',
     manual_canopy_diameter: '',
     eto_source: 'DAILY',
-    historical_study: ''
+    historical_study: '',
+    historical_formula_choice: ''
   });
 
   useEffect(() => {
@@ -61,7 +62,8 @@ export default function NewPlanting() {
           distancia_plantas: p.distancia_plantas || '',
           manual_canopy_diameter: p.manual_canopy_diameter || '',
           eto_source: p.eto_source || 'DAILY',
-          historical_study: p.historical_study || ''
+          historical_study: p.historical_study || '',
+          historical_formula_choice: p.historical_formula_choice || ''
         });
         toast("Modo Edición Activado", { icon: '✏️' });
       }
@@ -73,11 +75,15 @@ export default function NewPlanting() {
   };
 
   // 🟢 Función para calcular densidad en tiempo real
+  // OPCIÓN A: Distancias surco × planta → 10000/(s*p) * área
+  // OPCIÓN B: Diámetro de copa → 10000/(D²) * área  (marco cuadrado)
   const calcularPlantas = () => {
     const s = parseFloat(formData.distancia_surcos);
     const p = parseFloat(formData.distancia_plantas);
+    const d = parseFloat(formData.manual_canopy_diameter);
     const a = parseFloat(formData.area);
     if (s > 0 && p > 0 && a > 0) return Math.round((10000 / (s * p)) * a);
+    if (d > 0 && a > 0) return Math.round((10000 / (d * d)) * a);
     return 0; // Return safe default
   };
 
@@ -87,14 +93,27 @@ export default function NewPlanting() {
     if (!formData.soil) return toast.error("Debes asignar un tipo de suelo");
 
     // 🟢 QA FIX: Validación visual del estudio histórico
-    if (formData.eto_source === 'HISTORICAL' && !formData.historical_study) {
-      return toast.error("Por favor seleccione de la lista de estudios históricos");
+    if (formData.eto_source === 'HISTORICAL') {
+      if (!formData.historical_study) {
+        return toast.error("Por favor seleccione de la lista de estudios históricos");
+      }
+      if (!formData.historical_formula_choice) {
+        return toast.error("Por favor seleccione la fórmula a utilizar del estudio histórico");
+      }
     }
 
-    // 🟢 QA FIX: Division by zero constraint alert
+    // 🟢 QA FIX: Validar que haya al menos una forma de geometría
     const surc = parseFloat(formData.distancia_surcos);
     const plant = parseFloat(formData.distancia_plantas);
-    if ((surc === 0 || plant === 0) || (surc < 0 || plant < 0)) {
+    const canopy = parseFloat(formData.manual_canopy_diameter);
+    const hasDistances = surc > 0 && plant > 0;
+    const hasCanopy = canopy > 0;
+
+    if (!hasDistances && !hasCanopy) {
+      return toast.error("Debe ingresar las distancias de siembra O el diámetro de copa para calcular la densidad");
+    }
+
+    if (hasDistances && (surc <= 0 || plant <= 0)) {
       return toast.error("Las distancias geométricas no pueden ser cero o negativas");
     }
 
@@ -116,6 +135,7 @@ export default function NewPlanting() {
         manual_canopy_diameter: parseFloat(formData.manual_canopy_diameter) || null,
         eto_source: formData.eto_source,
         historical_study: formData.historical_study || null,
+        historical_formula_choice: formData.historical_formula_choice || null,
 
         // Datos Técnicos
         kc_inicial: selectedCropData.kc_inicial,
@@ -243,15 +263,37 @@ export default function NewPlanting() {
             </div>
 
             {formData.eto_source === 'HISTORICAL' && (
-              <div className="animate-in fade-in">
+              <div className="animate-in fade-in space-y-4 shadow-inner p-4 bg-white/50 rounded-lg">
                 <select
                   className="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.historical_study}
-                  onChange={e => setFormData({ ...formData, historical_study: e.target.value })}
+                  onChange={e => {
+                    setFormData({ ...formData, historical_study: e.target.value, historical_formula_choice: '' });
+                  }}
                 >
                   <option value="">-- Seleccione un Estudio Guardado en su Biblioteca --</option>
                   {studies.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_date} / {s.end_date})</option>)}
                 </select>
+
+                {/* Sub-selector dinámico de Fórmulas si ya se seleccionó un Estudio */}
+                {formData.historical_study && (
+                  <div className="animate-in slide-in-from-top-2 flex flex-col gap-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase">¿Qué fórmula matemática desea extraer de este estudio histórico?</label>
+                    <select
+                      className="w-full p-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-600 outline-none font-medium text-blue-900"
+                      value={formData.historical_formula_choice}
+                      onChange={e => setFormData({ ...formData, historical_formula_choice: e.target.value })}
+                    >
+                      <option value="">-- Seleccione la Fórmula a Utilizar --</option>
+                      {studies.find(s => s.id === parseInt(formData.historical_study))?.available_formulas?.map(f => (
+                        <option key={f} value={f}>{f} (Valor Calculado)</option>
+                      ))}
+                      <option value="AVERAGE_ALL" className="font-bold text-blue-700 bg-blue-100">
+                        ❖ Promediar las {studies.find(s => s.id === parseInt(formData.historical_study))?.available_formulas?.length} fórmulas guardadas
+                      </option>
+                    </select>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -313,14 +355,17 @@ export default function NewPlanting() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-amber-600 mb-1 uppercase">Diámetro de Sombra</label>
+                <label className="block text-xs font-bold text-amber-600 mb-1 uppercase">Ø Copa / Sombra (m)</label>
                 <input
-                  type="number" step="0.01" min="0" placeholder="Opcional (Ej: 2.5)"
-                  title="Deje vacío para que el sistema lo calcule usando el criterio de experiencia"
+                  type="number" step="0.01" min="0" placeholder="Alternativa a distancias"
+                  title="Si conoce el diámetro de copa, puede omitir las distancias de surco/planta. El sistema asumirá un marco cuadrado D×D para calcular la densidad."
                   className="w-full p-3 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none bg-amber-50/50"
                   value={formData.manual_canopy_diameter}
                   onChange={(e) => setFormData({ ...formData, manual_canopy_diameter: e.target.value })}
                 />
+                {parseFloat(formData.manual_canopy_diameter) > 0 && !parseFloat(formData.distancia_surcos) && (
+                  <p className="text-[10px] text-amber-600 mt-1">⚡ Densidad calculada por copa: {Math.round(10000 / (parseFloat(formData.manual_canopy_diameter) ** 2))} pl/ha</p>
+                )}
               </div>
             </div>
           </div>

@@ -128,6 +128,7 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
         lon = request.query_params.get('lon')
         start_str = request.query_params.get('start_date')
         end_str = request.query_params.get('end_date')
+        elevation = request.query_params.get('elevation', '0')
 
         if not all([lat, lon, start_str, end_str]):
             return Response({"error": "Faltan parámetros (lat, lon, start_date, end_date)"}, status=400)
@@ -140,9 +141,8 @@ class DailyWeatherViewSet(viewsets.ModelViewSet):
             if s_date >= e_date:
                 return Response({"error": "La fecha de inicio debe ser anterior a la final"}, status=400)
 
-            # 3. Llamada al servicio pasando el USUARIO para la hidratación de datos
-            # 🟢 AQUÍ ESTÁ EL CAMBIO CLAVE: request.user
-            data = get_historical_climatology(request.user, float(lat), float(lon), s_date, e_date)
+            # 3. Llamada al servicio con ELEVACIÓN
+            data = get_historical_climatology(request.user, float(lat), float(lon), s_date, e_date, elevation=float(elevation))
             
             return Response(data)
 

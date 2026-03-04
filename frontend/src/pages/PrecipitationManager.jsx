@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import CoordinateInput from '../components/CoordinateInput';
 import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import {
@@ -387,9 +388,9 @@ export default function PrecipitationManager() {
             <h3 className="text-xl font-bold mb-4">Nueva Estación</h3>
             <form onSubmit={handleStationSubmit} className="space-y-4">
               <input type="text" placeholder="Nombre" required className="w-full border p-2 rounded" value={stationData.name} onChange={e => setStationData({ ...stationData, name: e.target.value })} />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="number" placeholder="Latitud" required className="w-full border p-2 rounded" value={stationData.latitude} onChange={e => setStationData({ ...stationData, latitude: e.target.value })} />
-                <input type="number" placeholder="Longitud" required className="w-full border p-2 rounded" value={stationData.longitude} onChange={e => setStationData({ ...stationData, longitude: e.target.value })} />
+              <div className="grid grid-cols-1 gap-3">
+                <CoordinateInput label="Latitud" type="latitude" value={parseFloat(stationData.latitude) || 0} onChange={v => setStationData({ ...stationData, latitude: v })} />
+                <CoordinateInput label="Longitud" type="longitude" value={parseFloat(stationData.longitude) || 0} onChange={v => setStationData({ ...stationData, longitude: v })} />
               </div>
               <div className="flex gap-2 mt-4"><button type="button" onClick={() => setShowStationForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded">Guardar</button></div>
             </form>
@@ -747,9 +748,9 @@ export default function PrecipitationManager() {
             <h3 className="text-xl font-bold mb-4">Nueva Estación</h3>
             <form onSubmit={handleStationSubmit} className="space-y-4">
               <input type="text" placeholder="Nombre" required className="w-full border p-2 rounded" value={stationData.name} onChange={e => setStationData({ ...stationData, name: e.target.value })} />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="number" placeholder="Latitud" required className="w-full border p-2 rounded" value={stationData.latitude} onChange={e => setStationData({ ...stationData, latitude: e.target.value })} />
-                <input type="number" placeholder="Longitud" required className="w-full border p-2 rounded" value={stationData.longitude} onChange={e => setStationData({ ...stationData, longitude: e.target.value })} />
+              <div className="grid grid-cols-1 gap-3">
+                <CoordinateInput label="Latitud" type="latitude" value={parseFloat(stationData.latitude) || 0} onChange={v => setStationData({ ...stationData, latitude: v })} />
+                <CoordinateInput label="Longitud" type="longitude" value={parseFloat(stationData.longitude) || 0} onChange={v => setStationData({ ...stationData, longitude: v })} />
               </div>
               <div className="flex gap-2 mt-4"><button type="button" onClick={() => setShowStationForm(false)} className="flex-1 bg-gray-100 py-2 rounded">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded">Guardar</button></div>
             </form>

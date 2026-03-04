@@ -34,126 +34,253 @@ class ETOFormulas:
         temp_min: float,
         humidity: float,
         wind_speed: float,
-        radiation: float,
         latitude: float,
         day_of_year: int,
         elevation: float = 0,
         pressure: float = None,
-        cropwat_legacy_mode: bool = False) -> float:
-
+        sunshine_hours: float = None,
+        solar_radiation: float = None,
+        rh_max: float = None,
+        rh_min: float = None,
+        temp_dew: float = None,
+        g_monthly: float = None,
+        a_s: float = None,
+        b_s: float = None,
+        wind_z_height: float = 2.0) -> float:
         """
-        FAO Penman-Monteith (100% CROPWAT 8.0 Compliant)
-        """
-        # 1. Temperaturas
-        temp_avg = (temp_max + temp_min) / 2.0
+        Ecuación FAO Penman-Monteith — Réplica EXACTA de FAO-56
+        =========================================================
+        Implementación fiel de la ecuación de Penman-Monteith tal como se define
+        en el documento FAO Irrigation and Drainage Paper No. 56:
 
-        # 2. Presión Atmosférica y Constante Psicrométrica
-        # 🟢 2. Condición inteligente: Si NASA mandó presión, úsala. Si es manual, usa altitud.
-        if pressure and pressure > 0:
+            Allen, R.G., Pereira, L.S., Raes, D., Smith, M. (1998).
+            "Crop evapotranspiration - Guidelines for computing crop water
+            requirements." FAO Irrigation and Drainage Paper 56. FAO, Rome.
+
+        ECUACIÓN PRINCIPAL (Eq. 6, Cap. 2, p. 24):
+        ┌─────────────────────────────────────────────────────────────────┐
+        │         0.408 Δ (Rn - G) + γ [900/(T+273)] u₂ (eₛ - eₐ)         │
+        │  ETo = ─────────────────────────────────────────────────────    │
+        │                   Δ + γ (1 + 0.34 u₂)                           │
+        └─────────────────────────────────────────────────────────────────┘
+
+        Cada paso está anotado con su número de ecuación FAO-56 exacto.
+
+        Parámetros
+        ----------
+        temp_max : float          Temperatura máxima diaria [°C]
+        temp_min : float          Temperatura mínima diaria [°C]
+        humidity : float          Humedad relativa media [%] (RHmean, usada si no hay rh_max/rh_min)
+        wind_speed : float        Velocidad del viento a 2 m [m/s]
+        latitude : float          Latitud [grados decimales, + Norte, - Sur]
+        day_of_year : int         Día juliano del año [1-365/366]
+        elevation : float         Altitud sobre el nivel del mar [m]
+        pressure : float          Presión atmosférica [kPa] (opcional, si None se calcula con Eq 7)
+        sunshine_hours : float    Horas de brillo solar [h/día] (opcional)
+        solar_radiation : float   Radiación solar Rs medida [MJ m⁻² día⁻¹] (opcional)
+        rh_max : float            Humedad relativa máxima [%] (opcional, para Eq 17)
+        rh_min : float            Humedad relativa mínima [%] (opcional, para Eq 17)
+        temp_dew : float          Temperatura del punto de rocío [°C] (opcional, para Eq 14)
+        g_monthly : float         Flujo de calor del suelo mensual [MJ m⁻² día⁻¹] (opcional)
+        a_s : float               Fracción extraterrestre en días nublados (opcional, Eq 35/36)
+        b_s : float               Fracción extraterrestre en días despejados (opcional, Eq 35/36)
+        wind_z_height : float     Altura de medición del anemómetro [m] (defecto=2.0, Eq 47)
+
+        Retorna
+        -------
+        float : ETo [mm/día]
+
+        Referencias FAO-56
+        ------------------
+        Capítulo 2: Ecuación FAO Penman-Monteith (Eq. 6)
+        Capítulo 3: Datos meteorológicos (Eq. 7-44)
+        Capítulo 4: Determinación de ETo (Box 11, Examples 17-20)
+        """
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 1: TEMPERATURA MEDIA (Cap. 3)
+        # ════════════════════════════════════════════════════════════════
+        # Tmean = (Tmax + Tmin) / 2
+        temp_mean = (temp_max + temp_min) / 2.0
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 2: PRESIÓN ATMOSFÉRICA Y CONSTANTE PSICROMÉTRICA
+        # ════════════════════════════════════════════════════════════════
+
+        # ▸ Eq. 7 — Presión atmosférica [kPa]
+        # P = 101.3 × [(293 - 0.0065 z) / 293]^5.26
+        if pressure is not None and pressure > 0:
             P = pressure
         else:
             P = 101.3 * ((293.0 - 0.0065 * elevation) / 293.0) ** 5.26
-            
+
+        # ▸ Eq. 8 — Constante psicrométrica [kPa/°C]
+        # γ = (cp × P) / (ε × λ) = 0.000665 × P
+        # donde cp=1.013×10⁻³ MJ kg⁻¹ °C⁻¹, ε=0.622, λ=2.45 MJ kg⁻¹
         gamma = 0.000665 * P
 
-        # 3. Pendiente de la curva de presión de vapor
-        delta = 4098.0 * (0.6108 * math.exp((17.27 * temp_avg) / (temp_avg + 237.3))) / ((temp_avg + 237.3) ** 2)
+        # ════════════════════════════════════════════════════════════════
+        # PASO 3: PENDIENTE DE LA CURVA DE PRESIÓN DE VAPOR (Δ)
+        # ════════════════════════════════════════════════════════════════
 
-        # 4. Presión de vapor de saturación (es) y real (ea)
-        # 4. Presión de vapor de saturación (es) y real (ea)
-        # 🟢 CROPWAT 8.0: Eq 14 para Tmax y Tmin
-        es_max = 0.6108 * math.exp((17.27 * temp_max) / (temp_max + 237.3))
-        es_min = 0.6108 * math.exp((17.27 * temp_min) / (temp_min + 237.3))
-        
-        # CROPWAT usa simplemente `es = (es_max + es_min) / 2`
-        es = (es_max + es_min) / 2.0
-        
-        # 🟢 CROPWAT 8.0 QUIRK:
-        # A pesar de que FAO-56 eq 19 dice `ea = RHmean / 100 * es_min`
-        # El código legado de CROPWAT 8.0 en realidad calcula:
-        # ea = (es_max * RH/100 + es_min * RH/100) / 2 -> que es literalmente `es * RH/100`!!
-        
-        ea = es * (humidity / 100.0)
-        
-        # En la práctica Cropwat 8.0 cuando la radiación solar no es dada como insolacion 
-        # sino como Rs pura ajusta la temperatura del aire. Probemos modificando el viento
-        ws_2m = wind_speed 
-        
-        # 🟢 CROPWAT 8.0 LEGACY MODE:
-        # En el software de escritorio, para promedios mensuales, asume que el viento diurno 
-        # (cuando hay Rns) es el doble del nocturno, o escala el U2 empíricamente. 
-        # Resultando en un incremento promedio simulado de ~20% en el arrastre aerodinámico.
-        if cropwat_legacy_mode:
-            ws_2m = wind_speed * 1.22 # Factor empírico que sitúa las desviaciones en < 0.05
-            
+        # ▸ Eq. 13 — Pendiente evaluada en Tmean [kPa/°C]
+        # Δ = [4098 × 0.6108 × exp(17.27T / (T+237.3))] / (T+237.3)²
+        delta = (4098.0 * (0.6108 * math.exp(
+            (17.27 * temp_mean) / (temp_mean + 237.3)
+        ))) / ((temp_mean + 237.3) ** 2)
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 4: PRESIÓN DE VAPOR DE SATURACIÓN (es) Y REAL (ea)
+        # ════════════════════════════════════════════════════════════════
+
+        # ▸ Eq. 11 — Presión de vapor de saturación a temperatura T [kPa]
+        # e°(T) = 0.6108 × exp[17.27 T / (T + 237.3)]
+        def sat_vap_pressure(T: float) -> float:
+            """FAO-56 Eq. 11"""
+            return 0.6108 * math.exp((17.27 * T) / (T + 237.3))
+
+        e_tmax = sat_vap_pressure(temp_max)
+        e_tmin = sat_vap_pressure(temp_min)
+
+        # ▸ Eq. 12 — Presión media de vapor de saturación [kPa]
+        # es = [e°(Tmax) + e°(Tmin)] / 2
+        es = (e_tmax + e_tmin) / 2.0
+
+        # ▸ Presión de vapor real (ea) — Jerarquía FAO-56:
+        #   1. Tdew (Eq. 14):           ea = e°(Tdew)
+        #   2. RHmax + RHmin (Eq. 17):  ea = [e°(Tmin)×RHmax/100 + e°(Tmax)×RHmin/100] / 2
+        #   3. RHmax sola (Eq. 18):     ea = e°(Tmin) × RHmax/100
+        #   4. RHmean (Eq. 19):         ea = es × RHmean/100  (menos recomendada)
+
+        if temp_dew is not None:
+            # Eq. 14 — ea desde punto de rocío
+            ea = sat_vap_pressure(temp_dew)
+        elif rh_max is not None and rh_min is not None:
+            # Eq. 17 — ea desde RHmax y RHmin
+            ea = (e_tmin * (rh_max / 100.0) + e_tmax * (rh_min / 100.0)) / 2.0
+        elif rh_max is not None:
+            # Eq. 18 — ea solo desde RHmax
+            ea = e_tmin * (rh_max / 100.0)
+        else:
+            # Eq. 19 — ea desde RHmean (menos recomendada por FAO-56 p.37)
+            ea = es * (humidity / 100.0)
+
+        # ▸ Déficit de presión de vapor [kPa]
         vpd = es - ea
 
-        # 5. MÓDULO DE RADIACIÓN (Igual a CROPWAT)
+        # ════════════════════════════════════════════════════════════════
+        # PASO 5: RADIACIÓN
+        # ════════════════════════════════════════════════════════════════
+
+        # ▸ Eq. 22 — Latitud en radianes
         lat_rad = math.radians(latitude)
-        
-        # Declinación solar y ángulo horario
+
+        # ▸ Eq. 24 — Declinación solar [rad]
+        # δ = 0.409 sin(2π/365 × J - 1.39)
         sol_dec = 0.409 * math.sin((2.0 * math.pi / 365.0) * day_of_year - 1.39)
-        ws_val = -math.tan(lat_rad) * math.tan(sol_dec)
-        ws_val = max(-1.0, min(1.0, ws_val)) # Protección de límites
-        ws = math.acos(ws_val)
-        
-        # Horas máximas de insolación (N)
-        N_hours = (24.0 / math.pi) * ws
-        
-        # Distancia relativa Tierra-Sol
+
+        # ▸ Eq. 25 — Ángulo horario de puesta del sol [rad]
+        # ωs = arccos[-tan(φ) tan(δ)]
+        ws_arg = -math.tan(lat_rad) * math.tan(sol_dec)
+        ws_arg = max(-1.0, min(1.0, ws_arg))  # Protección polar
+        ws = math.acos(ws_arg)
+
+        # ▸ Eq. 23 — Distancia relativa inversa Tierra-Sol
+        # dr = 1 + 0.033 cos(2π/365 × J)
         dr = 1.0 + 0.033 * math.cos((2.0 * math.pi / 365.0) * day_of_year)
-        
-        # Radiación extraterrestre (Ra) [MJ/m2/día]
-        Ra = (24.0 * 60.0 / math.pi) * 0.0820 * dr * (
-            (ws * math.sin(lat_rad) * math.sin(sol_dec)) +
-            (math.cos(lat_rad) * math.cos(sol_dec) * math.sin(ws))
+
+        # ▸ Eq. 21 — Radiación extraterrestre [MJ m⁻² día⁻¹]
+        # Ra = (24×60/π) × Gsc × dr × [ωs sin(φ)sin(δ) + cos(φ)cos(δ)sin(ωs)]
+        # donde Gsc = 0.0820 MJ m⁻² min⁻¹
+        Gsc = 0.0820
+        Ra = (24.0 * 60.0 / math.pi) * Gsc * dr * (
+            ws * math.sin(lat_rad) * math.sin(sol_dec) +
+            math.cos(lat_rad) * math.cos(sol_dec) * math.sin(ws)
         )
-        
-        # Radiación de cielo despejado (Rso)
-        Rso = (0.75 + 2e-5 * elevation) * Ra 
-        
-        # Radiación (Rs)
-        rs_calc = radiation
-        
-        if getattr(ETOFormulas, '_use_sunshine', False) and radiation < 15:
-            # Si se pasa "sunshine hours" como radiación
-            rs_calc = (0.25 + 0.50 * (radiation / N_hours)) * Ra
-            
-        # Radiación neta de onda corta (Rns) -> Albedo FAO = 0.23
-        Rns = (1.0 - 0.23) * rs_calc
-        
-        # Radiación neta de onda larga (Rnl)
-        sigma = 4.903e-9 # Constante Stefan-Boltzmann
+
+        # ▸ Eq. 34 — Horas máximas de insolación (duración del día) [h]
+        # N = (24/π) × ωs
+        N = (24.0 / math.pi) * ws
+
+        # ▸ Radiación solar Rs [MJ m⁻² día⁻¹]
+        if solar_radiation is not None:
+            # Rs medida directamente
+            Rs = solar_radiation
+        elif sunshine_hours is not None:
+            # Eq. 35 — Fórmula de Ångström: Rs = (as + bs × n/N) × Ra
+            # Coeficientes recomendados FAO-56 si no hay calibración: as = 0.25, bs = 0.50
+            calc_as = a_s if a_s is not None else 0.25
+            calc_bs = b_s if b_s is not None else 0.50
+            Rs = (calc_as + calc_bs * (sunshine_hours / N)) * Ra
+        else:
+            raise ValueError(
+                "Se requiere 'solar_radiation' (Rs medida) o "
+                "'sunshine_hours' (horas de sol) para calcular Rs."
+            )
+
+        # ▸ Radiación de cielo despejado (Rso) [MJ m⁻² día⁻¹]
+        if a_s is not None and b_s is not None:
+            # Eq. 36 — Si se cuenta con valores calibrados de as y bs
+            Rso = (a_s + b_s) * Ra
+        else:
+            # Eq. 37 — Si no se cuenta con valores calibrados
+            Rso = (0.75 + 2e-5 * elevation) * Ra
+
+        # ▸ Eq. 38 — Radiación neta de onda corta [MJ m⁻² día⁻¹]
+        # Rns = (1 - α) × Rs   donde α = 0.23 (pasto de referencia)
+        Rns = (1.0 - 0.23) * Rs
+
+        # ▸ Eq. 39 — Radiación neta de onda larga [MJ m⁻² día⁻¹]
+        # Rnl = σ × [(Tmax,K⁴ + Tmin,K⁴)/2] × (0.34 - 0.14√ea) × (1.35 Rs/Rso - 0.35)
+        # donde σ = 4.903 × 10⁻⁹ MJ K⁻⁴ m⁻² día⁻¹
+        sigma = 4.903e-9
         tmax_k = temp_max + 273.16
         tmin_k = temp_min + 273.16
-        
-        # Cloudiness factor: CROPWAT 8.0 usa Rs/Rso
-        rs_rso = rs_calc / Rso if Rso > 0 else 0
-        rs_rso = max(0.0, min(1.0, rs_rso)) # Evitar negativos
-        
-        # Si venimos con horas de sol, la nube se estima n/N directo en CROPWAT
-        if getattr(ETOFormulas, '_use_sunshine', False) and radiation < 15:
-            cloudiness_factor = 0.1 + 0.9 * (radiation / N_hours)
-        else:
-            cloudiness_factor = 1.35 * rs_rso - 0.35
-            
-        Rnl = sigma * ((tmax_k**4 + tmin_k**4) / 2.0) * (0.34 - 0.14 * math.sqrt(ea)) * cloudiness_factor
-        
-        # Radiación Neta total (Rn)
+
+        rs_rso = Rs / Rso if Rso > 0 else 0.0
+        rs_rso = min(rs_rso, 1.0)  # FAO-56: Rs/Rso ≤ 1.0
+
+        Rnl = sigma * ((tmax_k**4 + tmin_k**4) / 2.0) * \
+              (0.34 - 0.14 * math.sqrt(ea)) * \
+              (1.35 * rs_rso - 0.35)
+
+        # ▸ Eq. 40 — Radiación neta [MJ m⁻² día⁻¹]
+        # Rn = Rns - Rnl
         Rn = Rns - Rnl
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 6: FLUJO DE CALOR DEL SUELO (G)
+        # ════════════════════════════════════════════════════════════════
+
+        # ▸ Eq. 42 — Para períodos diarios: G ≈ 0
+        # ▸ Eq. 43 — Para períodos mensuales: G = 0.14 × (Ti - Ti-1)
+        if g_monthly is not None:
+            G = g_monthly
+        else:
+            G = 0.0  # Asunción diaria estándar FAO-56
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 6.5: AJUSTE DE VELOCIDAD DEL VIENTO A 2M (Eq. 47)
+        # ════════════════════════════════════════════════════════════════
         
-        # Flujo de calor del suelo (G)
-        # 🟢 CROPWAT 8.0: En su calculadora mensual independiente (no cruzada mes a mes) asume G=0.
-        # Pero veamos el término aerodinámico:
-        G = 0.0 
-        
-        # 6. CÁLCULO FINAL ETo
-        # Ajuste de temperatura media para la densidad del aire en CROPWAT:
-        # CROPWAT la usa tal cual, pero revisemos term_aero
+        # ▸ Eq. 47 — Conversión de velocidad de viento a altura estándar (2m)
+        if wind_z_height != 2.0:
+            u2 = wind_speed * (4.87 / math.log(67.8 * wind_z_height - 5.42))
+        else:
+            u2 = wind_speed
+
+        # ════════════════════════════════════════════════════════════════
+        # PASO 7: ECUACIÓN FAO PENMAN-MONTEITH (Eq. 6)
+        # ════════════════════════════════════════════════════════════════
+
+        # Numerador: 0.408 Δ (Rn - G)  +  γ × [900/(Tmean+273)] × u₂ × (es - ea)
         term_rad = 0.408 * delta * (Rn - G)
-        term_aero = gamma * (900.0 / (temp_avg + 273.16)) * ws_2m * vpd # 273.16 en lugar de 273.0
-        
-        eto = (term_rad + term_aero) / (delta + gamma * (1.0 + 0.34 * ws_2m))
+        term_aero = gamma * (900.0 / (temp_mean + 273.0)) * u2 * vpd
+
+        # Denominador: Δ + γ (1 + 0.34 u₂)
+        denominator = delta + gamma * (1.0 + 0.34 * u2)
+
+        eto = (term_rad + term_aero) / denominator
 
         return round(max(0.0, eto), 2)
     

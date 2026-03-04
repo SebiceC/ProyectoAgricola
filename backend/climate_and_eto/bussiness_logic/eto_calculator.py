@@ -162,7 +162,7 @@ class ETOCalculatorService:
             print("Makkink inputs -> temp_avg:", temp_avg, "radiation:", rad, "elevation:", elev)
 
             # Prueba sin conversión
-            raw = self.formulas.makkink(temp_avg=temp_avg, radiation=rad, elevation=elev)
+            raw = self.formulas.makkink(temp_avg=temp_avg, solar_radiation=rad, elevation=elev)
             print("Makkink raw result:", raw)
 
             # Si sospechas unidad: prueba conversión MJ/m2/day -> W/m2 (o al revés)

@@ -16,8 +16,8 @@ lat = 4.6
 day_of_year = 150
 pressure = None # We will let it calculate it
 
-eto_0_elev = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year, elevation=0, pressure=pressure)
-eto_2100_elev = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year, elevation=2100, pressure=pressure)
+eto_0_elev = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year, elevation=0, )
+eto_2100_elev = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year, elevation=2100, )
 
 print(f"ETo without elevation (0m): {eto_0_elev}")
 print(f"ETo with elevation (2100m): {eto_2100_elev}")

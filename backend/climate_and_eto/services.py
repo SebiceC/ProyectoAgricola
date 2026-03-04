@@ -37,7 +37,7 @@ def print_month_stats(df_grouped):
 #  1. MOTOR DE CÁLCULO VECTORIAL (PRIVADO Y REUTILIZABLE)
 # =============================================================================
 
-def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
+def _fetch_and_calculate_vectors(lat, lon, start_date, end_date, elevation=0):
     """
     Función auxiliar: Baja datos de NASA y calcula TODAS las fórmulas vectorialmente.
     Devuelve un DataFrame listo para ser analizado (Gráfica) o guardado (Sync).
@@ -64,7 +64,9 @@ def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
     df['day_of_year'] = df.index.dayofyear
     df['month'] = df.index.month
 
-    # Lógica de cálculo por fila
+    # Lógica de cálculo por fila (elevation capturada por closure)
+    elev = elevation  # Captura para uso en closure
+
     def calculate_daily_row(row):
         t_max = row.get('temp_max')
         t_min = row.get('temp_min')
@@ -80,10 +82,10 @@ def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
 
         res = {}
         
-        # --- BLOQUE DE FÓRMULAS ---
+        # --- BLOQUE DE FÓRMULAS (elevation inyectada) ---
         try:
             if pd.notna(ws) and pd.notna(rh):
-                res['PENMAN'] = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rs, lat, doy)
+                res['PENMAN'] = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, lat, doy, elev, solar_radiation=rs)
             else: res['PENMAN'] = 0
         except: res['PENMAN'] = 0
 
@@ -95,13 +97,13 @@ def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
             else: res['TURC'] = 0
         except: res['TURC'] = 0
         
-        try: res['PRIESTLEY'] = ETOFormulas.priestley_taylor(t_avg, rs)
+        try: res['PRIESTLEY'] = ETOFormulas.priestley_taylor(t_avg, rs, elev)
         except: res['PRIESTLEY'] = 0
 
-        try: res['MAKKINK'] = ETOFormulas.makkink(t_avg, rs)
+        try: res['MAKKINK'] = ETOFormulas.makkink(t_avg, rs, elev)
         except: res['MAKKINK'] = 0
         
-        try: res['MAKKINK_ABSTEW'] = ETOFormulas.makkink_abstew(t_avg, rs)
+        try: res['MAKKINK_ABSTEW'] = ETOFormulas.makkink_abstew(t_avg, rs, elev)
         except: res['MAKKINK_ABSTEW'] = 0
 
         try:
@@ -110,7 +112,7 @@ def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
         except: res['IVANOV'] = 0
 
         try:
-            if pd.notna(ws) and pd.notna(rh): res['CHRISTIANSEN'] = ETOFormulas.christiansen(t_max, t_min, rh, ws, rs, lat, doy)
+            if pd.notna(ws) and pd.notna(rh): res['CHRISTIANSEN'] = ETOFormulas.christiansen(t_max, t_min, rh, ws, rs, lat, doy, elev)
             else: res['CHRISTIANSEN'] = 0
         except: res['CHRISTIANSEN'] = 0
         
@@ -131,15 +133,15 @@ def _fetch_and_calculate_vectors(lat, lon, start_date, end_date):
 #  2. SERVICIOS DE ANÁLISIS Y SINCRONIZACIÓN
 # =============================================================================
 
-def get_historical_climatology(user, lat, lon, start_date, end_date):
+def get_historical_climatology(user, lat, lon, start_date, end_date, elevation=0):
     """
     MODO LECTURA: Genera datos para la gráfica.
     NO guarda en base de datos (evita ensuciar la operación diaria).
     """
-    print_debug_header(f"Generando Gráfica Histórica ({start_date} a {end_date})")
+    print_debug_header(f"Generando Gráfica Histórica ({start_date} a {end_date}) [Elev={elevation}m]")
     
     # 1. Calcular en memoria
-    df = _fetch_and_calculate_vectors(lat, lon, start_date, end_date)
+    df = _fetch_and_calculate_vectors(lat, lon, start_date, end_date, elevation=elevation)
 
     # 2. Agregación Mensual
     formula_cols = ['PENMAN', 'HARGREAVES', 'TURC', 'PRIESTLEY', 'MAKKINK', 
@@ -299,7 +301,7 @@ def get_hybrid_weather(user, target_date, lat, lon, force_method=None):
         try:
             if method == 'PENMAN':
                 if all(x is not None for x in [t_max, t_min, rh, ws, rad]):
-                    eto_val = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, rad, lat, day_of_year)
+                    eto_val = ETOFormulas.penman_monteith(t_max, t_min, rh, ws, lat, day_of_year, 0, solar_radiation=rad)
                 else: raise ValueError("Faltan datos para Penman")
             elif method == 'TURC' and rad and rh:
                 eto_val = ETOFormulas.turc(t_avg, rh, rad)
@@ -382,7 +384,7 @@ def preview_eto_manual(data):
         except: pass
 
     try:
-        if method == 'PENMAN': return ETOFormulas.penman_monteith(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
+        if method == 'PENMAN': return ETOFormulas.penman_monteith(t_max, t_min, rh, wind, lat, day_of_year, elevation, solar_radiation=solar)
         elif method == 'CHRISTIANSEN': return ETOFormulas.christiansen(t_max, t_min, rh, wind, solar, lat, day_of_year, elevation)
         elif method == 'HARGREAVES': return ETOFormulas.hargreaves(t_max, t_min, t_avg, lat, day_of_year)
         elif method == 'MAKKINK': return ETOFormulas.makkink(t_avg, solar, elevation)

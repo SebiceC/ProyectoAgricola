@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import CoordinateInput from '../components/CoordinateInput';
 import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import {
@@ -243,7 +244,7 @@ export default function ClimateEto() {
         setAnalyzing(true);
         try {
             const res = await api.get('/weather/historical_analysis/', {
-                params: { lat: weatherData.latitude, lon: weatherData.longitude, start_date: analysisParams.start_date, end_date: analysisParams.end_date }
+                params: { lat: weatherData.latitude, lon: weatherData.longitude, elevation: weatherData.elevation || 0, start_date: analysisParams.start_date, end_date: analysisParams.end_date }
             });
             const chartData = res.data.map(item => ({ name: item.month_name, ...item.eto_results }));
             setHistoricalData(chartData);
@@ -280,8 +281,23 @@ export default function ClimateEto() {
     const handleExportExcel = () => { if (historicalData.length === 0) return toast.error("Sin datos"); const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(historicalData.map(({ month, name, ...rest }) => ({ Mes: name, ...rest }))); XLSX.utils.book_append_sheet(wb, ws, "Datos ETo"); XLSX.writeFile(wb, `ETo_${analysisParams.start_date}.xlsx`); };
     const handleExportImage = async () => { if (!chartRef.current) return; try { const canvas = await html2canvas(chartRef.current, { backgroundColor: '#fff', scale: 2 }); const link = document.createElement('a'); link.href = canvas.toDataURL("image/png"); link.download = `Grafica_${analysisParams.start_date}.png`; link.click(); } catch (e) { } };
 
-    const handleSaveStudy = async () => { if (!studyName.trim()) return toast.error("Falta nombre"); try { await api.post('/studies/', { name: studyName, start_date: analysisParams.start_date, end_date: analysisParams.end_date, latitude: weatherData.latitude, longitude: weatherData.longitude, result_data: historicalData }); toast.success("Estudio guardado"); setShowSaveModal(false); setStudyName(''); } catch (e) { toast.error("Error guardando estudio"); } };
-    const handleLoadStudy = (s) => { setAnalysisParams({ start_date: s.start_date, end_date: s.end_date }); setWeatherData(prev => ({ ...prev, latitude: s.latitude, longitude: s.longitude })); setHistoricalData(s.result_data); setActiveTab('HISTORICAL'); toast.success("Cargado"); };
+    const handleSaveStudy = async () => { if (!studyName.trim()) return toast.error("Falta nombre"); try { const studyPayload = historicalData.map((row, idx) => { const filteredEto = {}; selectedFormulas.forEach(f => { if (row[f] !== undefined) filteredEto[f] = row[f]; }); return { month: idx + 1, month_name: row.name, eto_results: filteredEto }; }); await api.post('/studies/', { name: studyName, start_date: analysisParams.start_date, end_date: analysisParams.end_date, latitude: weatherData.latitude, longitude: weatherData.longitude, result_data: studyPayload }); toast.success("Estudio guardado"); setShowSaveModal(false); setStudyName(''); } catch (e) { toast.error("Error guardando estudio"); } };
+    const handleLoadStudy = (s) => {
+        setAnalysisParams({ start_date: s.start_date, end_date: s.end_date });
+        setWeatherData(prev => ({ ...prev, latitude: s.latitude, longitude: s.longitude }));
+        // Normalizar: soportar formato plano viejo y anidado nuevo
+        const normalized = (s.result_data || []).map(row => {
+            if (row.eto_results) {
+                return { name: row.month_name, ...row.eto_results };
+            } else {
+                const { name, month, month_name, ...eto } = row;
+                return { name: name || month_name, ...eto };
+            }
+        });
+        setHistoricalData(normalized);
+        setActiveTab('HISTORICAL');
+        toast.success("Cargado");
+    };
     const handleDeleteStudy = async (id) => { if (!confirm("¿Eliminar?")) return; try { await api.delete(`/studies/${id}/`); toast.success("Eliminado"); loadSavedStudies(); } catch (e) { } };
     const toggleFormula = (m) => setSelectedFormulas(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
 
@@ -312,18 +328,14 @@ export default function ClimateEto() {
                         <div className="space-y-6">
                             <div className="bg-white p-4 rounded-xl border shadow-sm space-y-3">
                                 <h4 className="font-bold text-gray-700 flex items-center gap-2 text-sm"><MapPin size={16} /> Punto de Cálculo</h4>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Lat</label>
-                                        <input type="number" step="0.0001" value={weatherData.latitude} onChange={(e) => setWeatherData({ ...weatherData, latitude: parseFloat(e.target.value) })} className="w-full border p-2 rounded text-xs font-mono" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Lon</label>
-                                        <input type="number" step="0.0001" value={weatherData.longitude} onChange={(e) => setWeatherData({ ...weatherData, longitude: parseFloat(e.target.value) })} className="w-full border p-2 rounded text-xs font-mono" />
+                                <div className="space-y-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <CoordinateInput label="Latitud" type="latitude" value={weatherData.latitude} onChange={(v) => setWeatherData({ ...weatherData, latitude: v })} />
+                                        <CoordinateInput label="Longitud" type="longitude" value={weatherData.longitude} onChange={(v) => setWeatherData({ ...weatherData, longitude: v })} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Alt (m)</label>
-                                        <input type="number" step="1" value={weatherData.elevation} onChange={(e) => setWeatherData({ ...weatherData, elevation: parseFloat(e.target.value) })} className="w-full border p-2 rounded text-xs font-mono" />
+                                        <input type="number" step="1" value={weatherData.elevation} onChange={(e) => setWeatherData({ ...weatherData, elevation: parseFloat(e.target.value) })} className="w-full border border-gray-300 p-2 rounded text-xs font-mono" />
                                     </div>
                                 </div>
                             </div>
@@ -464,26 +476,8 @@ export default function ClimateEto() {
                         {/* Grid de Inputs: Coordenadas + Fechas */}
                         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
                             {/* Nuevos Inputs de Latitud/Longitud/Altitud */}
-                            <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Latitud</label>
-                                <input
-                                    type="number"
-                                    step="0.0001"
-                                    value={weatherData.latitude}
-                                    onChange={(e) => setWeatherData({ ...weatherData, latitude: parseFloat(e.target.value) })}
-                                    className="w-full border p-2 rounded text-sm font-mono"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Longitud</label>
-                                <input
-                                    type="number"
-                                    step="0.0001"
-                                    value={weatherData.longitude}
-                                    onChange={(e) => setWeatherData({ ...weatherData, longitude: parseFloat(e.target.value) })}
-                                    className="w-full border p-2 rounded text-sm font-mono"
-                                />
-                            </div>
+                            <CoordinateInput label="Latitud" type="latitude" value={weatherData.latitude} onChange={(v) => setWeatherData({ ...weatherData, latitude: v })} />
+                            <CoordinateInput label="Longitud" type="longitude" value={weatherData.longitude} onChange={(v) => setWeatherData({ ...weatherData, longitude: v })} />
                             <div>
                                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Altitud (m)</label>
                                 <input
@@ -592,21 +586,33 @@ export default function ClimateEto() {
                                                     {availableMethods.find(m => m.value === formula)?.label || formula}
                                                 </th>
                                             ))}
+                                            {selectedFormulas.length > 1 && (
+                                                <th className="px-6 py-4 text-center text-red-600 bg-red-50 border-l-2 border-red-200">⌀ Promedio</th>
+                                            )}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {historicalData.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-6 py-3 font-medium text-gray-800">{row.name}</td>
-                                                {selectedFormulas.map((formula) => (
-                                                    <td key={`${idx}-${formula}`} className="px-6 py-3 text-center font-mono text-gray-600">
-                                                        {row[formula] ? Number(row[formula]).toFixed(2) : '-'}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
+                                        {historicalData.map((row, idx) => {
+                                            const formulaVals = selectedFormulas.map(f => row[f]).filter(v => v !== undefined && v > 0);
+                                            const rowAvg = formulaVals.length > 0 ? formulaVals.reduce((a, b) => a + b, 0) / formulaVals.length : 0;
+                                            return (
+                                                <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-3 font-medium text-gray-800">{row.name}</td>
+                                                    {selectedFormulas.map((formula) => (
+                                                        <td key={`${idx}-${formula}`} className="px-6 py-3 text-center font-mono text-gray-600">
+                                                            {row[formula] ? Number(row[formula]).toFixed(2) : '-'}
+                                                        </td>
+                                                    ))}
+                                                    {selectedFormulas.length > 1 && (
+                                                        <td className="px-6 py-3 text-center font-mono font-bold text-red-700 bg-red-50/50 border-l-2 border-red-200">
+                                                            {rowAvg > 0 ? rowAvg.toFixed(2) : '-'}
+                                                        </td>
+                                                    )}
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
-                                    {/* Fila de Promedios Generales (Opcional, pero útil) */}
+                                    {/* Fila de Promedios Anuales */}
                                     <tfoot className="bg-gray-50 font-bold text-xs uppercase text-gray-700 border-t-2 border-gray-100">
                                         <tr>
                                             <td className="px-6 py-3">Promedio Anual</td>
@@ -619,6 +625,18 @@ export default function ClimateEto() {
                                                     </td>
                                                 );
                                             })}
+                                            {selectedFormulas.length > 1 && (() => {
+                                                const allMonthAvgs = historicalData.map(row => {
+                                                    const vals = selectedFormulas.map(f => row[f]).filter(v => v !== undefined && v > 0);
+                                                    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                                                }).filter(v => v > 0);
+                                                const grandAvg = allMonthAvgs.length > 0 ? allMonthAvgs.reduce((a, b) => a + b, 0) / allMonthAvgs.length : 0;
+                                                return (
+                                                    <td className="px-6 py-3 text-center text-red-700 bg-red-50 border-l-2 border-red-200">
+                                                        {grandAvg > 0 ? grandAvg.toFixed(2) : '-'}
+                                                    </td>
+                                                );
+                                            })()}
                                         </tr>
                                     </tfoot>
                                 </table>

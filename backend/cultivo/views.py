@@ -12,11 +12,77 @@ from .serializers import CropSerializer, CropToPlantSerializer, IrrigationExecut
 
 # 🟢 SERVICIOS ESTRICTOS (Solo Base de Datos Local)
 from climate_and_eto.services import get_weather_strictly_local
-from climate_and_eto.models import IrrigationSettings
+from climate_and_eto.models import IrrigationSettings, ClimateStudy
 from precipitaciones.services import get_precipitation_strictly_local
 # Usamos apps.get_model para evitar importaciones circulares si las hubiera, 
 # o importamos directo si la estructura lo permite.
 from precipitaciones.models import Station 
+
+
+def _get_eto_for_planting(planting, user, eval_date):
+    """
+    Función centralizada para obtener la ETo de un día dado.
+    Si la siembra usa fuente DAILY → consulta DailyWeather (NASA/Sensores).
+    Si la siembra usa fuente HISTORICAL → extrae del JSON del ClimateStudy.
+    
+    Estructura del JSON de ClimateStudy.result_data:
+    [
+        {"month": 1, "month_name": "January", "eto_results": {"PENMAN": 5.2, "HARGREAVES": 4.8}},
+        {"month": 2, ...},
+        ...
+    ]
+    
+    Retorna float (mm/día). Lanza ObjectDoesNotExist si no hay datos.
+    """
+    if planting.eto_source == 'HISTORICAL' and planting.historical_study_id:
+        study = planting.historical_study
+        if not study or not study.result_data:
+            raise ObjectDoesNotExist(
+                f"El estudio histórico vinculado (ID={planting.historical_study_id}) no contiene datos."
+            )
+        
+        month_num = eval_date.month
+        formula_key = planting.historical_formula_choice
+        
+        # Buscar la fila del mes correspondiente en el JSON
+        month_row = None
+        for row in study.result_data:
+            row_month = row.get('month') or row.get('mes')
+            if row_month and int(row_month) == month_num:
+                month_row = row
+                break
+        
+        if not month_row:
+            raise ObjectDoesNotExist(
+                f"No se encontraron datos para el mes {month_num} en el estudio '{study.name}'."
+            )
+        
+        # Las fórmulas están dentro de "eto_results" (sub-diccionario)
+        eto_results = month_row.get('eto_results', {})
+        # Fallback: si no hay "eto_results", buscar fórmulas en la raíz (compatibilidad)
+        if not eto_results:
+            excluded_keys = {'mes', 'month', 'month_name', 'name'}
+            eto_results = {k: v for k, v in month_row.items() if k not in excluded_keys and isinstance(v, (int, float))}
+        
+        if formula_key == 'AVERAGE_ALL':
+            values = [v for v in eto_results.values() if isinstance(v, (int, float))]
+            if not values:
+                raise ObjectDoesNotExist(
+                    f"No hay valores numéricos de ETo en el mes {month_num} del estudio '{study.name}'."
+                )
+            return sum(values) / len(values)
+        else:
+            eto_val = eto_results.get(formula_key)
+            if eto_val is None:
+                raise ObjectDoesNotExist(
+                    f"La fórmula '{formula_key}' no existe en el mes {month_num} del estudio '{study.name}'."
+                )
+            return float(eto_val)
+    else:
+        # Modo DAILY: lectura estricta de la base de datos local
+        weather_record = get_weather_strictly_local(user, eval_date)
+        return weather_record.eto_mm
+
 
 # ---------------------------------------------------------
 # VISTAS (VIEWSETS)
@@ -145,10 +211,8 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
                     current_water += delta_cc
                 limit_cc = new_limit_cc
 
-                # A. OBTENER CLIMA (ESTRICTO LOCAL)
-                # Si falta el dato, 'get_weather_strictly_local' lanzará ObjectDoesNotExist
-                weather_record = get_weather_strictly_local(user, curr)
-                day_eto = weather_record.eto_mm
+                # A. OBTENER ETo (DAILY o HISTORICAL según configuración de siembra)
+                day_eto = _get_eto_for_planting(planting, user, curr)
 
                 # B. OBTENER LLUVIA (ESTRICTO LOCAL)
                 # Si falta el dato, 'get_precipitation_strictly_local' lanzará ObjectDoesNotExist
@@ -267,7 +331,11 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             "kc_ajustado": round(kc_final, 2),
             "clima": {
                 "eto_ayer": round(last_eto, 2),
-                "fuente": "Base de Datos Local (Validada)"
+                "fuente": (
+                    f"Estudio Histórico: {planting.historical_study.name} ({planting.historical_formula_choice})"
+                    if planting.eto_source == 'HISTORICAL' and planting.historical_study
+                    else "Base de Datos Local (Validada)"
+                )
             },
             "variables_ambientales": {
                 "eto": round(last_eto, 2),
@@ -382,11 +450,10 @@ class CropToPlantViewSet(viewsets.ModelViewSet):
             irr_bruto = irrigations.get(curr, 0.0) or 0.0
             irr_neto = irr_bruto * settings_obj.system_efficiency
             
-            # b. ETo
+            # b. ETo (DAILY o HISTORICAL según configuración de siembra)
             eto_day = 0.0
             try:
-                weather_rec = get_weather_strictly_local(request.user, curr)
-                eto_day = weather_rec.eto_mm
+                eto_day = _get_eto_for_planting(planting, request.user, curr)
             except ObjectDoesNotExist:
                 # Si falta ETo en histórico, asumimos promedio o 0 para no romper la UI, 
                 # pero idealmente el usuario ya debió corregirlo en el cálculo principal.

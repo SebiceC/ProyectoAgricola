@@ -53,7 +53,10 @@ class CropToPlantSerializer(serializers.ModelSerializer):
             'distancia_surcos',
             'distancia_plantas',
             'densidad_calculada',
-            'fecha_cosecha_estimada'
+            'fecha_cosecha_estimada',
+            'eto_source',
+            'historical_study',
+            'historical_formula_choice'
         ]
         read_only_fields = ('user',) # Seguridad: El usuario se inyecta en el backend
 

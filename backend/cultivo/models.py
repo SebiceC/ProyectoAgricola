@@ -64,15 +64,28 @@ class CropToPlant(models.Model):
     ]
     eto_source = models.CharField(max_length=20, choices=ETO_SOURCES, default='DAILY')
     historical_study = models.ForeignKey('climate_and_eto.ClimateStudy', on_delete=models.SET_NULL, null=True, blank=True)
+    historical_formula_choice = models.CharField(
+        max_length=30,
+        null=True,
+        blank=True,
+        help_text="Formula específica seleccionada dentro del estudio histórico (o 'AVERAGE_ALL')"
+    )
     manual_canopy_diameter = models.FloatField(help_text='Diámetro de copa manual (m)', null=True, blank=True)
 
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
         # Lógica de Cálculo de Densidad
+        # OPCIÓN A: Distancias de siembra explícitas (surco × planta)
         # Fórmula: 10,000 m² / (Distancia Surco * Distancia Planta)
         if self.distancia_surcos and self.distancia_plantas and self.distancia_surcos > 0 and self.distancia_plantas > 0:
             self.densidad_calculada = round(10000 / (self.distancia_surcos * self.distancia_plantas))
+        # OPCIÓN B: Diámetro de copa (Para frutales/árboles, asume marco cuadrado D × D)
+        # Si el usuario provee solo el diámetro de copa, se asume que la distancia
+        # entre plantas y surcos equivale al diámetro de la copa del árbol.
+        elif self.manual_canopy_diameter and self.manual_canopy_diameter > 0:
+            d = self.manual_canopy_diameter
+            self.densidad_calculada = round(10000 / (d * d))
 
         super().save(*args, **kwargs)
     
