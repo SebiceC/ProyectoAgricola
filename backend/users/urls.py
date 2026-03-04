@@ -1,9 +1,10 @@
 from django.contrib import admin
 from django.urls import path
-from .views import CustomUserListView, CustomUserRetrieveUpdateDestroyView, AssignRoleView, RemoveRoleView
+from .views import CustomUserListView, CustomUserRetrieveUpdateDestroyView, AssignRoleView, RemoveRoleView, CurrentUserView
 from .auth import CustomUserLoginView, CustomUserRegisterView, ChangePasswordView
 
 urlpatterns = [
+    path('users/me/', CurrentUserView.as_view(), name='current-user'),
     path('users/register/', CustomUserRegisterView.as_view(), name='register'),
     path('users/login/', CustomUserLoginView.as_view(), name='login'),
     path('users/change-password/', ChangePasswordView.as_view(), name='change_password'),

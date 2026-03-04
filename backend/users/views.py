@@ -12,6 +12,22 @@ from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
 
+
+class CurrentUserView(APIView):
+    """Retorna o actualiza los datos del usuario autenticado."""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = CustomUserSerializer(request.user)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = CustomUserSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
 #  Create your views here.
 class CustomUserListView(ListAPIView):
     allowed_methods = ['GET']
